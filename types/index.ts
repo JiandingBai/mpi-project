@@ -67,6 +67,22 @@ export interface NeighborhoodData {
         };
       };
     };
+    "Future Percentile Prices": {
+      Category: {
+        [categoryId: string]: {
+          X_values: string[]; // Daily dates like "2025-08-07", "2025-08-08"
+          Y_values: number[][]; // Array of price/occupancy values for each day
+        };
+      };
+    };
+    "Future Occ/New/Canc": {
+      Category: {
+        [categoryId: string]: {
+          X_values: string[]; // Daily dates like "2025-08-07", "2025-08-08"
+          Y_values: number[][]; // Array of occupancy/booking values for each day
+        };
+      };
+    };
   };
 }
 
@@ -90,6 +106,41 @@ export interface CalculatedMPI {
   mpi_60: number;
   mpi_90: number;
   mpi_120: number;
+}
+
+export interface MPIComparison {
+  listingId: string;
+  group: string;
+  api_mpi_7: number;
+  api_mpi_30: number;
+  api_mpi_60: number;
+  api_mpi_90: number;
+  api_mpi_120: number;
+  calculated_mpi_7: number;
+  calculated_mpi_30: number;
+  calculated_mpi_60: number;
+  calculated_mpi_90: number;
+  calculated_mpi_120: number;
+  calculation_method_7: 'api' | 'neighborhood' | 'none';
+  calculation_method_30: 'api' | 'neighborhood' | 'none';
+  calculation_method_60: 'api' | 'neighborhood' | 'none';
+  calculation_method_90: 'api' | 'neighborhood' | 'none';
+  calculation_method_120: 'api' | 'neighborhood' | 'none';
+}
+
+export interface MPISummaryComparison {
+  group: string;
+  api_mpi_7: number;
+  api_mpi_30: number;
+  api_mpi_60: number;
+  api_mpi_90: number;
+  api_mpi_120: number;
+  calculated_mpi_7: number;
+  calculated_mpi_30: number;
+  calculated_mpi_60: number;
+  calculated_mpi_90: number;
+  calculated_mpi_120: number;
+  listingCount: number;
 }
 
 export interface OccupancyData {

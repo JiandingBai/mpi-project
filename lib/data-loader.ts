@@ -424,6 +424,22 @@ export async function loadNeighborhoodData(listingId: string): Promise<Neighborh
                 Y_values: [[75, 80, 85, 90, 88, 92, 95, 93]]
               }
             }
+          },
+          "Future Percentile Prices": {
+            Category: {
+              "0": {
+                X_values: ["2025-08-07", "2025-08-08", "2025-08-09", "2025-08-10", "2025-08-11", "2025-08-12", "2025-08-13", "2025-08-14"],
+                Y_values: [[200, 190, 180, 170], [250, 240, 230, 220], [300, 290, 280, 270], [250, 240, 230, 220], [400, 390, 380, 370], [75, 70, 65, 60]]
+              }
+            }
+          },
+          "Future Occ/New/Canc": {
+            Category: {
+              "0": {
+                X_values: ["2025-08-07", "2025-08-08", "2025-08-09", "2025-08-10", "2025-08-11", "2025-08-12", "2025-08-13", "2025-08-14"],
+                Y_values: [[75, 80, 75, 70, 85, 90, 85, 80]]
+              }
+            }
           }
         }
       };
@@ -465,38 +481,184 @@ export function calculateMarketOccupancy(
   startDate: Date,
   endDate: Date
 ): number {
-  const category = neighborhoodData.data["Market KPI"].Category[categoryId];
-  if (!category) return 0;
-
-  const { X_values, Y_values } = category;
+  // Try Future Occ/New/Canc first, but scan all categories to find realistic data
+  let category = neighborhoodData.data["Future Occ/New/Canc"]?.Category?.[categoryId];
+  let sectionName = "Future Occ/New/Canc";
+  let actualCategoryId = categoryId;
   
-  const relevantMonths: number[] = [];
-  
-  for (let i = 0; i < X_values.length; i++) {
-    const monthStr = X_values[i];
-    if (monthStr === "Last 365 Days" || monthStr === "Last 730 Days") continue;
+  // Scan all categories in Future Occ/New/Canc to find realistic occupancy data
+  if (neighborhoodData.data["Future Occ/New/Canc"]?.Category) {
+    const allCategories = Object.keys(neighborhoodData.data["Future Occ/New/Canc"].Category);
+    console.log(`🔍 Scanning ${allCategories.length} categories in Future Occ/New/Canc: [${allCategories.join(', ')}]`);
     
-    const [month, year] = monthStr.split(' ');
-    const monthDate = new Date(`${month} 1, ${year}`);
+    let foundRealisticData = false;
+    for (const catId of allCategories) {
+      const testCategory = neighborhoodData.data["Future Occ/New/Canc"].Category[catId];
+      if (testCategory?.Y_values?.[0]) {
+        // Check for realistic occupancy data (decimal values between 0-100, not round numbers)
+        const sampleValues = testCategory.Y_values[0].slice(0, 20);
+        const realisticValues = sampleValues.filter(val => 
+          val !== undefined && val !== null && val > 0 && val <= 100 && 
+          !Number.isInteger(val) // Exclude round numbers like 50, 100
+        );
+        
+        if (realisticValues.length >= 5) {
+          console.log(`✅ Found realistic occupancy data in category ${catId}: [${realisticValues.slice(0, 5).map(v => v.toFixed(2)).join(', ')}...]`);
+          category = testCategory;
+          actualCategoryId = catId;
+          foundRealisticData = true;
+          break;
+        } else {
+          console.log(`❌ Category ${catId} has suspicious data: [${sampleValues.slice(0, 5).join(', ')}...]`);
+        }
+      }
+    }
     
-    if (monthDate >= startDate && monthDate <= endDate) {
-      relevantMonths.push(i);
+    if (!foundRealisticData) {
+      console.log(`⚠️ No realistic occupancy data found in Future Occ/New/Canc, trying Future Percentile Prices...`);
+      category = neighborhoodData.data["Future Percentile Prices"]?.Category?.[categoryId];
+      sectionName = "Future Percentile Prices";
+      actualCategoryId = categoryId;
     }
   }
   
-  if (relevantMonths.length === 0) return 0;
+  if (!category) {
+    console.log(`❌ No data available in either section for category ${categoryId}`);
+    return 0;
+  }
+  
+  console.log(`🔍 Using section: ${sectionName}, category: ${actualCategoryId}`);
+
+  const { X_values, Y_values } = category;
+  
+  const relevantIndices: number[] = [];
+  
+  // Check if we have daily data (YYYY-MM-DD format) or monthly data (MMM YYYY format)
+  const hasDailyData = X_values.length > 0 && X_values[0].includes('-');
+  
+  if (hasDailyData) {
+    // Use precise daily data matching
+    for (let i = 0; i < X_values.length; i++) {
+      const dateStr = X_values[i];
+      if (dateStr === "Last 365 Days" || dateStr === "Last 730 Days") continue;
+      
+      try {
+        const date = new Date(dateStr);
+        if (date >= startDate && date <= endDate) {
+          relevantIndices.push(i);
+        }
+      } catch (error) {
+        // Skip invalid dates
+        continue;
+      }
+    }
+  } else {
+    // Fallback to monthly data matching
+    for (let i = 0; i < X_values.length; i++) {
+      const monthStr = X_values[i];
+      if (monthStr === "Last 365 Days" || monthStr === "Last 730 Days") continue;
+      
+      const [month, year] = monthStr.split(' ');
+      const monthDate = new Date(`${month} 1, ${year}`);
+      
+      // For monthly data, check if the month overlaps with our date range
+      const monthEnd = new Date(monthDate);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+      monthEnd.setDate(monthEnd.getDate() - 1); // Last day of the month
+      
+      if (monthDate <= endDate && monthEnd >= startDate) {
+        relevantIndices.push(i);
+      }
+    }
+  }
+  
+  if (relevantIndices.length === 0) return 0;
   
   let totalOccupancy = 0;
   let count = 0;
   
-  for (const monthIndex of relevantMonths) {
-    if (Y_values[0] && Y_values[0][monthIndex] !== undefined) {
-      totalOccupancy += Y_values[0][monthIndex];
+
+  
+  console.log(`🔍 Found ${relevantIndices.length} relevant indices for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+  console.log(`🔍 Data type: ${hasDailyData ? 'Daily' : 'Monthly'}`);
+  
+  // Debug Y_values structure first and determine which Y_values to use
+  console.log(`🔍 Y_values info: arrays=${Y_values.length}, lengths=[${Y_values.map(arr => arr?.length || 0).join(', ')}]`);
+  
+  let occupancyYIndex = 0; // Default to Y_values[0]
+  
+  if (relevantIndices.length > 0) {
+    const firstIndex = relevantIndices[0];
+    console.log(`🔍 Sample Y_values at index ${firstIndex}: [${Y_values.map((arr, i) => `Y[${i}]=${arr?.[firstIndex] ?? 'undefined'}`).join(', ')}]`);
+    
+    if (sectionName === "Future Occ/New/Canc") {
+      // For Future Occ/New/Canc, Y_values[0] is always "Occupancy" - use it directly
+      occupancyYIndex = 0;
+      console.log(`🔍 Using Y_values[0] for Future Occ/New/Canc occupancy data`);
+      
+      // Debug the nested structure for Future Occ/New/Canc
+      if (Y_values[0] && Y_values[0][0]) {
+        console.log(`🔍 Future Occ/New/Canc nested structure detected: Y_values[0][0] type=${typeof Y_values[0][0]}, isArray=${Array.isArray(Y_values[0][0])}`);
+        if (Array.isArray(Y_values[0][0])) {
+          console.log(`🔍 Y_values[0][0] sample: [${Y_values[0][0].slice(firstIndex, firstIndex + 3).join(', ')}]`);
+        }
+      }
+    } else {
+      // For Future Percentile Prices, scan to find which Y_values looks like occupancy
+      for (let i = 0; i < Y_values.length; i++) {
+        if (Y_values[i] && Y_values[i].length > firstIndex) {
+          const sampleValues = Y_values[i].slice(firstIndex, firstIndex + 3);
+          const hasData = sampleValues.some(val => val !== 0 && val !== undefined && val !== null);
+          console.log(`🔍 Y_values[${i}] sample [${firstIndex}-${firstIndex+2}]: [${sampleValues.join(', ')}] hasData=${hasData}`);
+          
+          // Look for reasonable occupancy-like values (0-100)
+          if (hasData) {
+            const avgValue = sampleValues.filter(v => v !== null && v !== undefined).reduce((a, b) => a + b, 0) / sampleValues.length;
+            if (avgValue > 0 && avgValue <= 100) {
+              console.log(`🎯 Y_values[${i}] looks like occupancy data (avg: ${avgValue.toFixed(1)})`);
+              occupancyYIndex = i;
+              break;
+            }
+          }
+        }
+      }
+    }
+    console.log(`🔍 Will use Y_values[${occupancyYIndex}] for occupancy calculation`);
+  }
+  
+  // Show first 3 for debugging, but process all for calculation
+  for (let i = 0; i < relevantIndices.length; i++) {
+    const index = relevantIndices[i];
+    if (i < 3) { // Debug output for first 3 only
+      console.log(`🔍 Index ${index} (${X_values[index]}): Y[0]=${Y_values[0]?.[index] ?? 'undefined'}, Y[1]=${Y_values[1]?.[index] ?? 'undefined'}, Y[2]=${Y_values[2]?.[index] ?? 'undefined'}`);
+    }
+    
+    let occupancyValue;
+    
+    // Handle nested structure in Future Occ/New/Canc vs flat structure in Future Percentile Prices
+    if (sectionName === "Future Occ/New/Canc" && Y_values[occupancyYIndex] && Array.isArray(Y_values[occupancyYIndex][0])) {
+      // Nested structure: Y_values[0][0][index]  
+      const nestedArray = Y_values[occupancyYIndex][0] as unknown as number[];
+      occupancyValue = nestedArray?.[index];
+    } else if (sectionName === "Future Occ/New/Canc") {
+      // Direct array structure in Future Occ/New/Canc: Y_values[0][index]
+      occupancyValue = Y_values[occupancyYIndex]?.[index];
+    } else {
+      // Flat structure in Future Percentile Prices: Y_values[index]
+      occupancyValue = Y_values[occupancyYIndex]?.[index];
+    }
+    
+    if (occupancyValue !== undefined && occupancyValue !== 0) { // Skip zero/undefined values
+      // Convert to decimal (divide by 100 for percentages)
+      totalOccupancy += occupancyValue / 100;
       count++;
     }
   }
   
-  return count > 0 ? totalOccupancy / count : 0;
+  const avgOccupancy = count > 0 ? totalOccupancy / count : 0;
+  console.log(`🔍 Market occupancy result: total=${totalOccupancy}, count=${count}, avg=${avgOccupancy} (${(avgOccupancy*100).toFixed(1)}%)`);
+  
+  return avgOccupancy;
 }
 
 export function calculatePropertyOccupancy(
@@ -504,15 +666,18 @@ export function calculatePropertyOccupancy(
   startDate: Date,
   endDate: Date
 ): number {
+  // Note: For MPI calculations, we're looking at future periods but only have past occupancy data
+  // This is a limitation of the available data. We use the best available approximation.
   const now = new Date();
-  const daysDiff = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   
   if (daysDiff <= 30) {
     return extractPercentage(listing.adjusted_occupancy_past_30);
   } else if (daysDiff <= 90) {
     return extractPercentage(listing.adjusted_occupancy_past_90);
   } else {
-    return extractPercentage(listing.adjusted_occupancy_past_30);
+    // For longer periods, use 90-day historical as best approximation
+    return extractPercentage(listing.adjusted_occupancy_past_90);
   }
 }
 

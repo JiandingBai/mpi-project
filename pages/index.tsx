@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { GetServerSideProps } from 'next';
-import { MPISummary } from '../types';
+import { MPISummary, MPISummaryComparison } from '../types';
 
 interface HomeProps {
   initialData: {
-    summaries: MPISummary[];
+    summaries: MPISummary[] | MPISummaryComparison[];
     totalListings: number;
     totalGroups: number;
     grouping: string;
+    mode?: 'normal' | 'comparison';
     neighborhoodInfo: {
       categories: number;
       location: { lat: number; lng: number };
       source: string;
     };
-    calculationStats: {
+    calculationStats?: {
       existingMPIUsed: number;
       neighborhoodCalculated: number;
       noDataAvailable: number;
@@ -23,12 +24,13 @@ interface HomeProps {
 }
 
 export default function Home({ initialData }: HomeProps) {
-  const [summaries, setSummaries] = useState<MPISummary[]>(initialData.summaries);
+  const [summaries, setSummaries] = useState<MPISummary[] | MPISummaryComparison[]>(initialData.summaries);
   const [neighborhoodInfo, setNeighborhoodInfo] = useState(initialData.neighborhoodInfo);
   const [calculationStats, setCalculationStats] = useState(initialData.calculationStats);
   const [totalListings, setTotalListings] = useState(initialData.totalListings);
   const [totalGroups, setTotalGroups] = useState(initialData.totalGroups);
   const [grouping, setGrouping] = useState(initialData.grouping);
+  const [mode, setMode] = useState<'normal' | 'comparison'>(initialData.mode || 'normal');
   const [loading, setLoading] = useState(false);
 
   // Client-side data fetching as fallback
@@ -60,17 +62,45 @@ export default function Home({ initialData }: HomeProps) {
     fetchData();
   }, [summaries.length]);
 
-  // Handle grouping change
-  const handleGroupingChange = async (newGrouping: string) => {
+  // Handle mode change
+  const handleModeChange = async (newMode: 'normal' | 'comparison') => {
     setLoading(true);
+    setMode(newMode);
     try {
-      const response = await fetch(`/api/mpi?grouping=${newGrouping}`);
+      const compareParam = newMode === 'comparison' ? '&compare=true' : '';
+      const response = await fetch(`/api/mpi?grouping=${grouping}${compareParam}`);
       const result = await response.json();
       
       if (result.success) {
         setSummaries(result.data.summaries);
         setTotalGroups(result.data.totalGroups);
         setGrouping(result.data.grouping);
+        if (result.data.calculationStats) {
+          setCalculationStats(result.data.calculationStats);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data with new mode:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle grouping change
+  const handleGroupingChange = async (newGrouping: string) => {
+    setLoading(true);
+    try {
+      const compareParam = mode === 'comparison' ? '&compare=true' : '';
+      const response = await fetch(`/api/mpi?grouping=${newGrouping}${compareParam}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setSummaries(result.data.summaries);
+        setTotalGroups(result.data.totalGroups);
+        setGrouping(result.data.grouping);
+        if (result.data.calculationStats) {
+          setCalculationStats(result.data.calculationStats);
+        }
       }
     } catch (error) {
       console.error('Error fetching data with new grouping:', error);
@@ -82,13 +112,13 @@ export default function Home({ initialData }: HomeProps) {
   useEffect(() => {
     // Log to console as requested
     console.log('MPI Summaries by Group:');
-    console.table(summaries.map((summary: MPISummary) => ({
+    console.table(summaries.map((summary: MPISummary | MPISummaryComparison) => ({
       Group: summary.group,
-      'MPI 7-day': summary.mpi_7,
-      'MPI 30-day': summary.mpi_30,
-      'MPI 60-day': summary.mpi_60,
-      'MPI 90-day': summary.mpi_90,
-      'MPI 120-day': summary.mpi_120,
+      'MPI 7-day': 'mpi_7' in summary ? summary.mpi_7 : summary.api_mpi_7,
+      'MPI 30-day': 'mpi_30' in summary ? summary.mpi_30 : summary.api_mpi_30,
+      'MPI 60-day': 'mpi_60' in summary ? summary.mpi_60 : summary.api_mpi_60,
+      'MPI 90-day': 'mpi_90' in summary ? summary.mpi_90 : summary.api_mpi_90,
+      'MPI 120-day': 'mpi_120' in summary ? summary.mpi_120 : summary.api_mpi_120,
       'Listings': summary.listingCount,
     })));
     
@@ -96,9 +126,9 @@ export default function Home({ initialData }: HomeProps) {
     console.log('Calculation Statistics:', calculationStats);
   }, [summaries, neighborhoodInfo, calculationStats]);
 
-  const totalCalculations = calculationStats.existingMPIUsed + 
-                           calculationStats.neighborhoodCalculated + 
-                           calculationStats.noDataAvailable;
+  const totalCalculations = calculationStats ? 
+    (calculationStats.existingMPIUsed + calculationStats.neighborhoodCalculated + calculationStats.noDataAvailable) : 
+    0;
 
   if (loading) {
     return (
@@ -132,20 +162,36 @@ export default function Home({ initialData }: HomeProps) {
           {/* Grouping Dropdown */}
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <div>
-                <label htmlFor="grouping" className="block text-sm font-medium text-gray-700 mb-2">
-                  Group By:
-                </label>
-                <select
-                  id="grouping"
-                  value={grouping}
-                  onChange={(e) => handleGroupingChange(e.target.value)}
-                  className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  <option value="city">City</option>
-                  <option value="bedrooms">Bedrooms</option>
-                  <option value="city-bedrooms">City + Bedrooms</option>
-                </select>
+              <div className="flex gap-8">
+                <div>
+                  <label htmlFor="grouping" className="block text-sm font-medium text-gray-700 mb-2">
+                    Group By:
+                  </label>
+                  <select
+                    id="grouping"
+                    value={grouping}
+                    onChange={(e) => handleGroupingChange(e.target.value)}
+                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="city">City</option>
+                    <option value="bedrooms">Bedrooms</option>
+                    <option value="city-bedrooms">City + Bedrooms</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="mode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Display Mode:
+                  </label>
+                  <select
+                    id="mode"
+                    value={mode}
+                    onChange={(e) => handleModeChange(e.target.value as 'normal' | 'comparison')}
+                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="normal">Normal (API MPI)</option>
+                    <option value="comparison">Comparison Mode</option>
+                  </select>
+                </div>
               </div>
               <div className="text-sm text-gray-600">
                 <p><strong>Current Grouping:</strong> {grouping}</p>
@@ -154,23 +200,32 @@ export default function Home({ initialData }: HomeProps) {
             </div>
           </div>
           
+          <div className="px-6 py-3 bg-yellow-50 border-b border-gray-200">
+            <div className="flex items-center text-sm text-yellow-800">
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span><strong>Note:</strong> Calculated MPI uses historical property occupancy (past 30 days) vs future market forecasts due to data availability.</span>
+            </div>
+          </div>
+          
           <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Calculation Statistics</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
               <div className="bg-green-100 p-3 rounded">
                 <p className="font-medium text-green-800">Existing MPI Used</p>
-                <p className="text-2xl font-bold text-green-600">{calculationStats.existingMPIUsed}</p>
-                <p className="text-green-700">{totalCalculations > 0 ? Math.round((calculationStats.existingMPIUsed / totalCalculations) * 100) : 0}%</p>
+                <p className="text-2xl font-bold text-green-600">{calculationStats?.existingMPIUsed || 0}</p>
+                <p className="text-green-700">{totalCalculations > 0 ? Math.round(((calculationStats?.existingMPIUsed || 0) / totalCalculations) * 100) : 0}%</p>
               </div>
               <div className="bg-blue-100 p-3 rounded">
                 <p className="font-medium text-blue-800">Neighborhood Calculated</p>
-                <p className="text-2xl font-bold text-blue-600">{calculationStats.neighborhoodCalculated}</p>
-                <p className="text-blue-700">{totalCalculations > 0 ? Math.round((calculationStats.neighborhoodCalculated / totalCalculations) * 100) : 0}%</p>
+                <p className="text-2xl font-bold text-blue-600">{calculationStats?.neighborhoodCalculated || 0}</p>
+                <p className="text-blue-700">{totalCalculations > 0 ? Math.round(((calculationStats?.neighborhoodCalculated || 0) / totalCalculations) * 100) : 0}%</p>
               </div>
               <div className="bg-gray-100 p-3 rounded">
                 <p className="font-medium text-gray-800">No Data Available</p>
-                <p className="text-2xl font-bold text-gray-600">{calculationStats.noDataAvailable}</p>
-                <p className="text-gray-700">{totalCalculations > 0 ? Math.round((calculationStats.noDataAvailable / totalCalculations) * 100) : 0}%</p>
+                <p className="text-2xl font-bold text-gray-600">{calculationStats?.noDataAvailable || 0}</p>
+                <p className="text-gray-700">{totalCalculations > 0 ? Math.round(((calculationStats?.noDataAvailable || 0) / totalCalculations) * 100) : 0}%</p>
               </div>
               <div className="bg-gray-100 p-3 rounded">
                 <p className="font-medium text-gray-800">Total Calculations</p>
@@ -181,60 +236,122 @@ export default function Home({ initialData }: HomeProps) {
           </div>
           
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Group
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    MPI 7-day
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    MPI 30-day
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    MPI 60-day
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    MPI 90-day
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    MPI 120-day
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Listings
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {summaries.map((summary, index) => (
-                  <tr key={summary.group} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {summary.group}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.mpi_7.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.mpi_30.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.mpi_60.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.mpi_90.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.mpi_120.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {summary.listingCount}
-                    </td>
+            {mode === 'comparison' ? (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Group
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      7-day<br/>API / Calc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      30-day<br/>API / Calc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      60-day<br/>API / Calc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      90-day<br/>API / Calc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      120-day<br/>API / Calc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Listings
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {summaries.map((summary: any, index) => (
+                    <tr key={summary.group} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {summary.group}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-semibold text-blue-600">{summary.api_mpi_7?.toFixed(2) || '0.00'}</div>
+                        <div className="text-gray-500 text-xs">{summary.calculated_mpi_7?.toFixed(2) || '0.00'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-semibold text-blue-600">{summary.api_mpi_30?.toFixed(2) || '0.00'}</div>
+                        <div className="text-gray-500 text-xs">{summary.calculated_mpi_30?.toFixed(2) || '0.00'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-semibold text-blue-600">{summary.api_mpi_60?.toFixed(2) || '0.00'}</div>
+                        <div className="text-gray-500 text-xs">{summary.calculated_mpi_60?.toFixed(2) || '0.00'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-semibold text-blue-600">{summary.api_mpi_90?.toFixed(2) || '0.00'}</div>
+                        <div className="text-gray-500 text-xs">{summary.calculated_mpi_90?.toFixed(2) || '0.00'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-semibold text-blue-600">{summary.api_mpi_120?.toFixed(2) || '0.00'}</div>
+                        <div className="text-gray-500 text-xs">{summary.calculated_mpi_120?.toFixed(2) || '0.00'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {summary.listingCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Group
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      MPI 7-day
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      MPI 30-day
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      MPI 60-day
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      MPI 90-day
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      MPI 120-day
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Listings
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {summaries.map((summary: any, index) => (
+                    <tr key={summary.group} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {summary.group}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(summary.mpi_7 || summary.api_mpi_7 || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(summary.mpi_30 || summary.api_mpi_30 || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(summary.mpi_60 || summary.api_mpi_60 || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(summary.mpi_90 || summary.api_mpi_90 || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {(summary.mpi_120 || summary.api_mpi_120 || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {summary.listingCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
           
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
