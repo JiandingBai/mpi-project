@@ -52,6 +52,24 @@ export interface ListingsData {
   listings: Listing[];
 }
 
+export interface NeighborhoodData {
+  data: {
+    "Listings Used": number;
+    currency: string;
+    lat: number;
+    lng: number;
+    source: string;
+    "Market KPI": {
+      Category: {
+        [categoryId: string]: {
+          X_values: string[]; // Month names like "Aug 2023", "Sep 2023"
+          Y_values: number[][]; // Array of occupancy values for each month
+        };
+      };
+    };
+  };
+}
+
 export type Timeframe = 7 | 30 | 60 | 90 | 120;
 
 export interface MPISummary {
@@ -72,4 +90,13 @@ export interface CalculatedMPI {
   mpi_60: number;
   mpi_90: number;
   mpi_120: number;
+}
+
+export interface OccupancyData {
+  propertyOccupancy: number;
+  marketOccupancy: number;
+  dateRange: {
+    start: Date;
+    end: Date;
+  };
 }

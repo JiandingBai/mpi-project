@@ -7,11 +7,58 @@ interface HomeProps {
     summaries: MPISummary[];
     totalListings: number;
     totalGroups: number;
+    neighborhoodInfo: {
+      categories: number;
+      location: {
+        lat: number;
+        lng: number;
+      };
+      source: string;
+    };
+    calculationStats: {
+      existingMPIUsed: number;
+      neighborhoodCalculated: number;
+      fallbackUsed: number;
+      totalListings: number;
+    };
   };
 }
 
 export default function Home({ initialData }: HomeProps) {
   const [summaries, setSummaries] = useState<MPISummary[]>(initialData.summaries);
+  const [neighborhoodInfo, setNeighborhoodInfo] = useState(initialData.neighborhoodInfo);
+  const [calculationStats, setCalculationStats] = useState(initialData.calculationStats);
+  const [totalListings, setTotalListings] = useState(initialData.totalListings);
+  const [totalGroups, setTotalGroups] = useState(initialData.totalGroups);
+  const [loading, setLoading] = useState(false);
+
+  // Client-side data fetching as fallback
+  useEffect(() => {
+    const fetchData = async () => {
+      // Only fetch if we don't have data from server-side
+      if (summaries.length === 0) {
+        setLoading(true);
+        try {
+          const response = await fetch('/api/mpi');
+          const result = await response.json();
+          
+          if (result.success) {
+            setSummaries(result.data.summaries);
+            setNeighborhoodInfo(result.data.neighborhoodInfo);
+            setCalculationStats(result.data.calculationStats);
+            setTotalListings(result.data.totalListings);
+            setTotalGroups(result.data.totalGroups);
+          }
+        } catch (error) {
+          console.error('Client-side fetch error:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [summaries.length]);
 
   useEffect(() => {
     // Log to console as requested
@@ -25,7 +72,25 @@ export default function Home({ initialData }: HomeProps) {
       'MPI 120-day': summary.mpi_120,
       'Listings': summary.listingCount,
     })));
-  }, [summaries]);
+    
+    console.log('Neighborhood Data Source:', neighborhoodInfo);
+    console.log('Calculation Statistics:', calculationStats);
+  }, [summaries, neighborhoodInfo, calculationStats]);
+
+  const totalCalculations = calculationStats.existingMPIUsed + 
+                           calculationStats.neighborhoodCalculated + 
+                           calculationStats.fallbackUsed;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading MPI data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -36,8 +101,39 @@ export default function Home({ initialData }: HomeProps) {
               Market Penetration Index (MPI) Summary
             </h1>
             <p className="mt-2 text-sm text-gray-600">
-              Average MPI values grouped by property location
+              Average MPI values grouped by property location using neighborhood market data
             </p>
+            <div className="mt-2 text-xs text-gray-500">
+              <p>Market data source: {neighborhoodInfo.source}</p>
+              <p>Neighborhood categories: {neighborhoodInfo.categories}</p>
+              <p>Location: {neighborhoodInfo.location.lat.toFixed(4)}, {neighborhoodInfo.location.lng.toFixed(4)}</p>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Calculation Statistics</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+              <div className="bg-green-100 p-3 rounded">
+                <p className="font-medium text-green-800">Existing MPI Used</p>
+                <p className="text-2xl font-bold text-green-600">{calculationStats.existingMPIUsed}</p>
+                <p className="text-green-700">{totalCalculations > 0 ? Math.round((calculationStats.existingMPIUsed / totalCalculations) * 100) : 0}%</p>
+              </div>
+              <div className="bg-blue-100 p-3 rounded">
+                <p className="font-medium text-blue-800">Neighborhood Calculated</p>
+                <p className="text-2xl font-bold text-blue-600">{calculationStats.neighborhoodCalculated}</p>
+                <p className="text-blue-700">{totalCalculations > 0 ? Math.round((calculationStats.neighborhoodCalculated / totalCalculations) * 100) : 0}%</p>
+              </div>
+              <div className="bg-yellow-100 p-3 rounded">
+                <p className="font-medium text-yellow-800">Fallback Used</p>
+                <p className="text-2xl font-bold text-yellow-600">{calculationStats.fallbackUsed}</p>
+                <p className="text-yellow-700">{totalCalculations > 0 ? Math.round((calculationStats.fallbackUsed / totalCalculations) * 100) : 0}%</p>
+              </div>
+              <div className="bg-gray-100 p-3 rounded">
+                <p className="font-medium text-gray-800">Total Calculations</p>
+                <p className="text-2xl font-bold text-gray-600">{totalCalculations}</p>
+                <p className="text-gray-700">({totalListings} listings × 5 timeframes)</p>
+              </div>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -99,8 +195,8 @@ export default function Home({ initialData }: HomeProps) {
           
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              <p><strong>Total Groups:</strong> {initialData.totalGroups}</p>
-              <p><strong>Total Listings:</strong> {initialData.totalListings}</p>
+              <p><strong>Total Groups:</strong> {totalGroups}</p>
+              <p><strong>Total Listings:</strong> {totalListings}</p>
             </div>
           </div>
         </div>
@@ -109,10 +205,15 @@ export default function Home({ initialData }: HomeProps) {
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
+    // Determine the correct API URL based on environment
+    const protocol = context.req.headers['x-forwarded-proto'] || 'http';
+    const host = context.req.headers.host || 'localhost:3000';
+    const apiUrl = `${protocol}://${host}/api/mpi`;
+    
     // Call the API endpoint from the server
-    const response = await fetch('http://localhost:3000/api/mpi');
+    const response = await fetch(apiUrl);
     const result = await response.json();
     
     if (result.success) {
@@ -122,6 +223,8 @@ export const getServerSideProps: GetServerSideProps = async () => {
             summaries: result.data.summaries,
             totalListings: result.data.totalListings,
             totalGroups: result.data.totalGroups,
+            neighborhoodInfo: result.data.neighborhoodInfo,
+            calculationStats: result.data.calculationStats,
           },
         },
       };
@@ -136,6 +239,17 @@ export const getServerSideProps: GetServerSideProps = async () => {
           summaries: [],
           totalListings: 0,
           totalGroups: 0,
+          neighborhoodInfo: {
+            categories: 0,
+            location: { lat: 0, lng: 0 },
+            source: 'Unknown'
+          },
+          calculationStats: {
+            existingMPIUsed: 0,
+            neighborhoodCalculated: 0,
+            fallbackUsed: 0,
+            totalListings: 0
+          },
         },
       },
     };

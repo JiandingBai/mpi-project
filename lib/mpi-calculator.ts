@@ -1,18 +1,53 @@
-import { Listing, ListingsData, MPISummary, CalculatedMPI, Timeframe } from '../types';
+import { 
+  Listing, 
+  ListingsData, 
+  MPISummary, 
+  CalculatedMPI, 
+  Timeframe, 
+  NeighborhoodData,
+  OccupancyData 
+} from '../types';
+import { 
+  matchListingToNeighborhood, 
+  calculateMarketOccupancy, 
+  calculatePropertyOccupancy 
+} from './data-loader';
 
 /**
- * Extracts percentage value from string like "80 %"
+ * Calculate date range for a given timeframe
  */
-function extractPercentage(value: string): number {
-  if (!value || value === "Unavailable") return 0;
-  const match = value.match(/(\d+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1]) / 100 : 0;
+function getDateRangeForTimeframe(timeframe: Timeframe): { start: Date; end: Date } {
+  const end = new Date();
+  const start = new Date();
+  
+  switch (timeframe) {
+    case 7:
+      start.setDate(end.getDate() - 7);
+      break;
+    case 30:
+      start.setDate(end.getDate() - 30);
+      break;
+    case 60:
+      start.setDate(end.getDate() - 60);
+      break;
+    case 90:
+      start.setDate(end.getDate() - 90);
+      break;
+    case 120:
+      start.setDate(end.getDate() - 120);
+      break;
+  }
+  
+  return { start, end };
 }
 
 /**
- * Calculates MPI for a single listing
+ * Calculate MPI for a single listing using neighborhood data
  */
-function calculateListingMPI(listing: Listing): CalculatedMPI {
+function calculateListingMPI(
+  listing: Listing, 
+  neighborhoodData: NeighborhoodData
+): CalculatedMPI {
   const group = listing.group || 'Unknown';
   
   // Helper function to get MPI value or calculate it
@@ -20,28 +55,31 @@ function calculateListingMPI(listing: Listing): CalculatedMPI {
     const mpiField = `mpi_next_${timeframe}` as keyof Listing;
     const existingMPI = listing[mpiField] as number;
     
-    if (existingMPI !== undefined && existingMPI !== null) {
+    // Priority 1: If existing MPI is available and valid, use it
+    if (existingMPI !== undefined && existingMPI !== null && existingMPI > 0) {
       return existingMPI;
     }
     
-    // Calculate MPI using formula: (property_occupancy / market_occupancy) * 100
-    let propertyOccupancy: number;
-    let marketOccupancy: number;
+    // Priority 2: Try to calculate using neighborhood data
+    const dateRange = getDateRangeForTimeframe(timeframe);
     
-    if (timeframe === 30) {
-      propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_30);
-      marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_30);
-    } else if (timeframe === 90) {
-      propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_90);
-      marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_90);
-    } else {
-      // For other timeframes, we'll use the 30-day data as approximation
-      propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_30);
-      marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_30);
+    // Match listing to neighborhood category
+    const categoryId = matchListingToNeighborhood(listing, neighborhoodData);
+    if (categoryId) {
+      // Calculate property occupancy
+      const propertyOccupancy = calculatePropertyOccupancy(listing, dateRange.start, dateRange.end);
+      
+      // Calculate market occupancy from neighborhood data
+      const marketOccupancy = calculateMarketOccupancy(neighborhoodData, categoryId, dateRange.start, dateRange.end);
+      
+      // Calculate MPI: (property_occupancy / market_occupancy) * 100
+      if (marketOccupancy > 0) {
+        return (propertyOccupancy / marketOccupancy) * 100;
+      }
     }
     
-    if (marketOccupancy === 0) return 0;
-    return (propertyOccupancy / marketOccupancy) * 100;
+    // Priority 3: Fallback to using listing-level market occupancy
+    return calculateFallbackMPI(listing, timeframe);
   };
   
   return {
@@ -53,6 +91,37 @@ function calculateListingMPI(listing: Listing): CalculatedMPI {
     mpi_90: getMPI(90),
     mpi_120: getMPI(120),
   };
+}
+
+/**
+ * Fallback MPI calculation using listing-level market occupancy data
+ * Used when neighborhood data is not available or doesn't match
+ */
+function calculateFallbackMPI(listing: Listing, timeframe: Timeframe): number {
+  // Extract percentage value from string like "80 %"
+  function extractPercentage(value: string): number {
+    if (!value || value === "Unavailable") return 0;
+    const match = value.match(/(\d+(?:\.\d+)?)/);
+    return match ? parseFloat(match[1]) / 100 : 0;
+  }
+  
+  let propertyOccupancy: number;
+  let marketOccupancy: number;
+  
+  if (timeframe === 30) {
+    propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_30);
+    marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_30);
+  } else if (timeframe === 90) {
+    propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_90);
+    marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_90);
+  } else {
+    // For other timeframes, use the 30-day data as approximation
+    propertyOccupancy = extractPercentage(listing.adjusted_occupancy_past_30);
+    marketOccupancy = extractPercentage(listing.market_adjusted_occupancy_past_30);
+  }
+  
+  if (marketOccupancy === 0) return 0;
+  return (propertyOccupancy / marketOccupancy) * 100;
 }
 
 /**
@@ -96,16 +165,68 @@ function calculateGroupAverages(calculatedMPIs: CalculatedMPI[]): MPISummary[] {
 }
 
 /**
- * Main function to process listings and calculate MPI summaries
+ * Main function to process listings and calculate MPI summaries using neighborhood data
  */
-export function calculateMPISummaries(listingsData: ListingsData): {
+export function calculateMPISummaries(
+  listingsData: ListingsData, 
+  neighborhoodData: NeighborhoodData
+): {
   summaries: MPISummary[];
   calculatedMPIs: CalculatedMPI[];
+  calculationStats: {
+    existingMPIUsed: number;
+    neighborhoodCalculated: number;
+    fallbackUsed: number;
+    totalListings: number;
+  };
 } {
-  const calculatedMPIs = listingsData.listings.map(calculateListingMPI);
+  let existingMPIUsed = 0;
+  let neighborhoodCalculated = 0;
+  let fallbackUsed = 0;
+  
+  const calculatedMPIs = listingsData.listings.map(listing => {
+    const mpi = calculateListingMPI(listing, neighborhoodData);
+    
+    // Count calculation methods used
+    const timeframes: Timeframe[] = [7, 30, 60, 90, 120];
+    timeframes.forEach(timeframe => {
+      const mpiField = `mpi_next_${timeframe}` as keyof Listing;
+      const existingMPI = listing[mpiField] as number;
+      
+      if (existingMPI !== undefined && existingMPI !== null && existingMPI > 0) {
+        existingMPIUsed++;
+      } else {
+        // Check if neighborhood calculation was used
+        const categoryId = matchListingToNeighborhood(listing, neighborhoodData);
+        if (categoryId) {
+          const dateRange = getDateRangeForTimeframe(timeframe);
+          const marketOccupancy = calculateMarketOccupancy(neighborhoodData, categoryId, dateRange.start, dateRange.end);
+          if (marketOccupancy > 0) {
+            neighborhoodCalculated++;
+          } else {
+            fallbackUsed++;
+          }
+        } else {
+          fallbackUsed++;
+        }
+      }
+    });
+    
+    return mpi;
+  });
+  
   const summaries = calculateGroupAverages(calculatedMPIs);
   
-  return { summaries, calculatedMPIs };
+  return { 
+    summaries, 
+    calculatedMPIs,
+    calculationStats: {
+      existingMPIUsed,
+      neighborhoodCalculated,
+      fallbackUsed,
+      totalListings: listingsData.listings.length
+    }
+  };
 }
 
 /**

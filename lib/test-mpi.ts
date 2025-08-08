@@ -1,5 +1,5 @@
 import { calculateMPISummaries, logMPISummaries } from './mpi-calculator';
-import { loadListingsData } from './data-loader';
+import { loadListingsData, loadNeighborhoodData } from './data-loader';
 
 async function testMPICalculations() {
   try {
@@ -7,8 +7,12 @@ async function testMPICalculations() {
     const listingsData = await loadListingsData();
     console.log(`Loaded ${listingsData.listings.length} listings`);
     
+    console.log('Loading neighborhood data...');
+    const neighborhoodData = await loadNeighborhoodData();
+    console.log(`Loaded neighborhood data with ${Object.keys(neighborhoodData.data["Market KPI"].Category).length} categories`);
+    
     console.log('\nCalculating MPI summaries...');
-    const { summaries, calculatedMPIs } = calculateMPISummaries(listingsData);
+    const { summaries, calculatedMPIs } = calculateMPISummaries(listingsData, neighborhoodData);
     
     console.log(`\nFound ${summaries.length} groups:`);
     summaries.forEach(summary => {
