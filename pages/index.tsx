@@ -10,16 +10,13 @@ interface HomeProps {
     grouping: string;
     neighborhoodInfo: {
       categories: number;
-      location: {
-        lat: number;
-        lng: number;
-      };
+      location: { lat: number; lng: number };
       source: string;
     };
     calculationStats: {
       existingMPIUsed: number;
       neighborhoodCalculated: number;
-      fallbackUsed: number;
+      noDataAvailable: number;
       totalListings: number;
     };
   };
@@ -101,7 +98,7 @@ export default function Home({ initialData }: HomeProps) {
 
   const totalCalculations = calculationStats.existingMPIUsed + 
                            calculationStats.neighborhoodCalculated + 
-                           calculationStats.fallbackUsed;
+                           calculationStats.noDataAvailable;
 
   if (loading) {
     return (
@@ -170,10 +167,10 @@ export default function Home({ initialData }: HomeProps) {
                 <p className="text-2xl font-bold text-blue-600">{calculationStats.neighborhoodCalculated}</p>
                 <p className="text-blue-700">{totalCalculations > 0 ? Math.round((calculationStats.neighborhoodCalculated / totalCalculations) * 100) : 0}%</p>
               </div>
-              <div className="bg-yellow-100 p-3 rounded">
-                <p className="font-medium text-yellow-800">Fallback Used</p>
-                <p className="text-2xl font-bold text-yellow-600">{calculationStats.fallbackUsed}</p>
-                <p className="text-yellow-700">{totalCalculations > 0 ? Math.round((calculationStats.fallbackUsed / totalCalculations) * 100) : 0}%</p>
+              <div className="bg-gray-100 p-3 rounded">
+                <p className="font-medium text-gray-800">No Data Available</p>
+                <p className="text-2xl font-bold text-gray-600">{calculationStats.noDataAvailable}</p>
+                <p className="text-gray-700">{totalCalculations > 0 ? Math.round((calculationStats.noDataAvailable / totalCalculations) * 100) : 0}%</p>
               </div>
               <div className="bg-gray-100 p-3 rounded">
                 <p className="font-medium text-gray-800">Total Calculations</p>
@@ -299,7 +296,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           calculationStats: {
             existingMPIUsed: 0,
             neighborhoodCalculated: 0,
-            fallbackUsed: 0,
+            noDataAvailable: 0,
             totalListings: 0
           },
         },

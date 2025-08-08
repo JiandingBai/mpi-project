@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { calculateMPISummaries } from '../../lib/mpi-calculator';
-import { loadListingsData, loadNeighborhoodData } from '../../lib/data-loader';
+import { loadListingsData } from '../../lib/data-loader';
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,15 +16,14 @@ export default async function handler(
     // Get grouping parameter from query string, default to 'city'
     const grouping = req.query.grouping as string || 'city';
     
-    const [listingsData, neighborhoodData] = await Promise.all([
-      loadListingsData(),
-      loadNeighborhoodData()
-    ]);
+    // Load listings data (now includes PriceLabs API integration)
+    const listingsData = await loadListingsData();
     
-    console.log(`API: Loaded ${listingsData.listings.length} listings and neighborhood data`);
+    console.log(`API: Loaded ${listingsData.listings.length} listings`);
     console.log(`API: Using grouping: ${grouping}`);
     
-    const { summaries, calculatedMPIs, calculationStats } = calculateMPISummaries(listingsData, neighborhoodData, grouping);
+    // Calculate MPI summaries (now async and uses real neighborhood data)
+    const { summaries, calculatedMPIs, calculationStats } = await calculateMPISummaries(listingsData, grouping);
     
     console.log(`API: Calculated ${summaries.length} group summaries`);
     
@@ -37,12 +36,9 @@ export default async function handler(
         totalGroups: summaries.length,
         grouping,
         neighborhoodInfo: {
-          categories: Object.keys(neighborhoodData.data["Market KPI"].Category).length,
-          location: {
-            lat: neighborhoodData.data.lat,
-            lng: neighborhoodData.data.lng
-          },
-          source: neighborhoodData.data.source
+          categories: 0, // Will be updated when we have real neighborhood data
+          location: { lat: 0, lng: 0 },
+          source: 'PriceLabs API'
         },
         calculationStats
       }

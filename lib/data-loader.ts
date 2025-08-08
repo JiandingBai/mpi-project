@@ -1,21 +1,48 @@
 import { ListingsData, NeighborhoodData } from '../types';
 
 /**
- * Load listings data from the public directory
+ * Load listings data from PriceLabs API with fallback to mock files
  */
 export async function loadListingsData(): Promise<ListingsData> {
   try {
     // Check if we're in a server environment
     if (typeof window === 'undefined') {
-      // Server-side: try multiple approaches
+      // Server-side: try PriceLabs API first
+      try {
+        const apiKey = process.env.PRICELABS_API_KEY;
+        if (!apiKey) {
+          throw new Error('PRICELABS_API_KEY not found in environment variables');
+        }
+
+        console.log('Trying PriceLabs API for listings...');
+        
+        const response = await fetch(`https://api.pricelabs.co/v1/listings?api_key=${apiKey}`);
+
+        if (!response.ok) {
+          throw new Error(`PriceLabs API error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Validate data structure
+        if (!data.listings || !Array.isArray(data.listings)) {
+          throw new Error('Invalid listings data structure from PriceLabs API');
+        }
+        
+        console.log(`✅ Loaded ${data.listings.length} listings from PriceLabs API`);
+        return data as ListingsData;
+      } catch (apiError) {
+        console.log('❌ PriceLabs API failed:', apiError);
+        console.log('Falling back to mock files...');
+      }
       
-      // Approach 1: Try public directory first (as requested)
+      // Fallback 1: Try public directory
       try {
         const fs = await import('fs');
         const path = await import('path');
         const publicFilePath = path.join(process.cwd(), 'public', 'listings.json');
         
-        console.log('Trying public directory first:', publicFilePath);
+        console.log('Trying public directory:', publicFilePath);
         
         // Check if file exists
         if (fs.existsSync(publicFilePath)) {
@@ -27,7 +54,7 @@ export async function loadListingsData(): Promise<ListingsData> {
             throw new Error('Invalid listings data structure');
           }
           
-          console.log(`✅ Loaded ${data.listings.length} listings from public directory`);
+          console.log(`✅ Loaded ${data.listings.length} listings from public directory (fallback)`);
           return data;
         } else {
           console.log('❌ Public file not found, trying mock directory...');
@@ -36,7 +63,7 @@ export async function loadListingsData(): Promise<ListingsData> {
         console.log('❌ Public directory approach failed:', fsError);
       }
       
-      // Approach 2: Try mock directory as fallback
+      // Fallback 2: Try mock directory
       try {
         const fs = await import('fs');
         const path = await import('path');
@@ -54,22 +81,22 @@ export async function loadListingsData(): Promise<ListingsData> {
             throw new Error('Invalid listings data structure');
           }
           
-          console.log(`✅ Loaded ${data.listings.length} listings from mock directory`);
+          console.log(`✅ Loaded ${data.listings.length} listings from mock directory (fallback)`);
           return data;
         } else {
-          console.log('❌ Mock file not found, trying fetch approach...');
+          console.log('❌ Mock file not found, using sample data...');
         }
       } catch (fsError) {
         console.log('❌ Mock directory approach failed:', fsError);
       }
       
-      // Approach 3: Try fetch with absolute URL (for Vercel)
+      // Fallback 3: Try fetch with absolute URL (for Vercel)
       try {
         const baseUrl = process.env.VERCEL_URL 
           ? `https://${process.env.VERCEL_URL}` 
           : process.env.NODE_ENV === 'production' 
             ? 'https://mpi-project.vercel.app'
-            : 'http://localhost:3000'; // Back to port 3000
+            : 'http://localhost:3000';
             
         console.log('Trying fetch approach with URL:', `${baseUrl}/listings.json`);
         
@@ -84,13 +111,13 @@ export async function loadListingsData(): Promise<ListingsData> {
           throw new Error('Invalid listings data structure');
         }
         
-        console.log(`✅ Loaded ${data.listings.length} listings from server (fetch)`);
+        console.log(`✅ Loaded ${data.listings.length} listings from server (fetch fallback)`);
         return data as ListingsData;
       } catch (fetchError) {
         console.log('❌ Fetch approach failed:', fetchError);
       }
       
-      // Approach 4: Fallback to realistic sample data
+      // Fallback 4: Hardcoded sample data
       console.log('❌ All approaches failed, using realistic fallback sample data...');
       return {
         listings: [
@@ -244,6 +271,7 @@ export async function loadListingsData(): Promise<ListingsData> {
         ]
       };
     } else {
+      // Client-side: use fetch (will use fallback data)
       const response = await fetch('/listings.json');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -264,20 +292,48 @@ export async function loadListingsData(): Promise<ListingsData> {
 }
 
 /**
- * Load neighborhood data from the public directory
+ * Load neighborhood data from PriceLabs API for a specific listing
  */
-export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
+export async function loadNeighborhoodData(listingId: string): Promise<NeighborhoodData> {
   try {
+    // Check if we're in a server environment
     if (typeof window === 'undefined') {
-      // Server-side: try multiple approaches
+      // Server-side: try PriceLabs API first
+      try {
+        const apiKey = process.env.PRICELABS_API_KEY;
+        if (!apiKey) {
+          throw new Error('PRICELABS_API_KEY not found in environment variables');
+        }
+
+        console.log(`Trying PriceLabs API for neighborhood data (listing: ${listingId})...`);
+        
+        const response = await fetch(`https://api.pricelabs.co/v1/neighborhood_data?pms=hostaway&listing_id=${listingId}&api_key=${apiKey}`);
+
+        if (!response.ok) {
+          throw new Error(`PriceLabs API error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Validate data structure
+        if (!data.data || !data.data["Market KPI"]) {
+          throw new Error('Invalid neighborhood data structure from PriceLabs API');
+        }
+        
+        console.log(`✅ Loaded neighborhood data for listing ${listingId} from PriceLabs API`);
+        return data as NeighborhoodData;
+      } catch (apiError) {
+        console.log('❌ PriceLabs API failed for neighborhood:', apiError);
+        console.log('Falling back to mock files...');
+      }
       
-      // Approach 1: Try public directory first (as requested)
+      // Fallback 1: Try public directory
       try {
         const fs = await import('fs');
         const path = await import('path');
         const publicFilePath = path.join(process.cwd(), 'public', 'neighborhood.json');
         
-        console.log('Trying public directory first for neighborhood:', publicFilePath);
+        console.log('Trying public directory for neighborhood:', publicFilePath);
         
         // Check if file exists
         if (fs.existsSync(publicFilePath)) {
@@ -289,7 +345,7 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
             throw new Error('Invalid neighborhood data structure');
           }
           
-          console.log(`✅ Loaded neighborhood data with ${Object.keys(data.data["Market KPI"].Category).length} categories from public directory`);
+          console.log(`✅ Loaded neighborhood data from public directory (fallback)`);
           return data;
         } else {
           console.log('❌ Public neighborhood file not found, trying mock directory...');
@@ -298,7 +354,7 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
         console.log('❌ Public directory approach failed for neighborhood:', fsError);
       }
       
-      // Approach 2: Try mock directory as fallback
+      // Fallback 2: Try mock directory
       try {
         const fs = await import('fs');
         const path = await import('path');
@@ -316,7 +372,7 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
             throw new Error('Invalid neighborhood data structure');
           }
           
-          console.log(`✅ Loaded neighborhood data with ${Object.keys(data.data["Market KPI"].Category).length} categories from mock directory`);
+          console.log(`✅ Loaded neighborhood data from mock directory (fallback)`);
           return data;
         } else {
           console.log('❌ Mock neighborhood file not found, trying fetch approach...');
@@ -325,13 +381,13 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
         console.log('❌ Mock directory approach failed for neighborhood:', fsError);
       }
       
-      // Approach 3: Try fetch with absolute URL (for Vercel)
+      // Fallback 3: Try fetch with absolute URL (for Vercel)
       try {
         const baseUrl = process.env.VERCEL_URL 
           ? `https://${process.env.VERCEL_URL}` 
           : process.env.NODE_ENV === 'production' 
             ? 'https://mpi-project.vercel.app'
-            : 'http://localhost:3000'; // Back to port 3000
+            : 'http://localhost:3000';
             
         console.log('Trying fetch approach for neighborhood with URL:', `${baseUrl}/neighborhood.json`);
         
@@ -346,13 +402,13 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
           throw new Error('Invalid neighborhood data structure');
         }
         
-        console.log(`✅ Loaded neighborhood data with ${Object.keys(data.data["Market KPI"].Category).length} categories from server (fetch)`);
+        console.log(`✅ Loaded neighborhood data from server (fetch fallback)`);
         return data as NeighborhoodData;
       } catch (fetchError) {
         console.log('❌ Fetch approach failed for neighborhood:', fetchError);
       }
       
-      // Approach 4: Fallback to realistic neighborhood data
+      // Fallback 4: Hardcoded sample neighborhood data
       console.log('❌ All approaches failed for neighborhood, using realistic fallback neighborhood data...');
       return {
         data: {
@@ -372,6 +428,7 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
         }
       };
     } else {
+      // Client-side: use fetch (will use fallback data)
       const response = await fetch('/neighborhood.json');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -382,7 +439,7 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
         throw new Error('Invalid neighborhood data structure');
       }
       
-      console.log(`✅ Loaded neighborhood data with ${Object.keys(data.data["Market KPI"].Category).length} categories from client`);
+      console.log(`✅ Loaded neighborhood data from client`);
       return data as NeighborhoodData;
     }
   } catch (error) {
@@ -391,32 +448,17 @@ export async function loadNeighborhoodData(): Promise<NeighborhoodData> {
   }
 }
 
-/**
- * Match a listing to a neighborhood category based on location and bedroom count
- * This is a simplified matching logic - you may need to adjust based on your data structure
- */
 export function matchListingToNeighborhood(
   listing: any,
   neighborhoodData: NeighborhoodData
 ): string | null {
-  // For now, we'll use the first category (0) as default
-  // In a real implementation, you'd match based on:
-  // - Geographic proximity (lat/lng)
-  // - Bedroom count
-  // - Property type
-  // - Market segment
-  
   const categories = Object.keys(neighborhoodData.data["Market KPI"].Category);
   if (categories.length > 0) {
     return categories[0]; // Default to first category
   }
-  
   return null;
 }
 
-/**
- * Calculate average market occupancy for a given date range
- */
 export function calculateMarketOccupancy(
   neighborhoodData: NeighborhoodData,
   categoryId: string,
@@ -428,14 +470,12 @@ export function calculateMarketOccupancy(
 
   const { X_values, Y_values } = category;
   
-  // Find months that fall within our date range
   const relevantMonths: number[] = [];
   
   for (let i = 0; i < X_values.length; i++) {
     const monthStr = X_values[i];
     if (monthStr === "Last 365 Days" || monthStr === "Last 730 Days") continue;
     
-    // Parse month string (e.g., "Aug 2023")
     const [month, year] = monthStr.split(' ');
     const monthDate = new Date(`${month} 1, ${year}`);
     
@@ -446,7 +486,6 @@ export function calculateMarketOccupancy(
   
   if (relevantMonths.length === 0) return 0;
   
-  // Calculate average occupancy from relevant months
   let totalOccupancy = 0;
   let count = 0;
   
@@ -460,18 +499,11 @@ export function calculateMarketOccupancy(
   return count > 0 ? totalOccupancy / count : 0;
 }
 
-/**
- * Calculate average property occupancy for a given date range
- * This is a simplified calculation - in reality you'd need historical booking data
- */
 export function calculatePropertyOccupancy(
   listing: any,
   startDate: Date,
   endDate: Date
 ): number {
-  // For now, we'll use the existing occupancy fields as approximations
-  // In a real implementation, you'd calculate from historical booking data
-  
   const now = new Date();
   const daysDiff = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   
@@ -480,14 +512,10 @@ export function calculatePropertyOccupancy(
   } else if (daysDiff <= 90) {
     return extractPercentage(listing.adjusted_occupancy_past_90);
   } else {
-    // Fallback to 30-day occupancy
     return extractPercentage(listing.adjusted_occupancy_past_30);
   }
 }
 
-/**
- * Extract percentage value from string like "80 %"
- */
 function extractPercentage(value: string): number {
   if (!value || value === "Unavailable") return 0;
   const match = value.match(/(\d+(?:\.\d+)?)/);
