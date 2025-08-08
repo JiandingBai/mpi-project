@@ -1,0 +1,75 @@
+export interface Listing {
+  id: string;
+  pms: string;
+  name: string;
+  latitude: string;
+  longitude: string;
+  country: string;
+  city_name: string;
+  state: string;
+  no_of_bedrooms: number;
+  min: number | null;
+  base: number | null;
+  max: number | null;
+  group: string | null;
+  subgroup: string | null;
+  tags: string | null;
+  notes: string | null;
+  isHidden: boolean;
+  push_enabled: boolean;
+  last_date_pushed: string | null;
+  revenue_ytd: number | string;
+  stly_revenue_ytd: number | string;
+  revenue_past_60: number | string;
+  stly_revenue_past_60: number | string;
+  last_booked_date: string;
+  booking_pickup_unique_past_7: number | string;
+  booking_pickup_unique_past_30: number | string;
+  mpi_next_90: number;
+  revenue_past_30: number | string;
+  stly_revenue_past_30: number | string;
+  adjusted_occupancy_past_30: string;
+  market_adjusted_occupancy_past_30: string;
+  adjusted_occupancy_past_90: string;
+  market_adjusted_occupancy_past_90: string;
+  revenue_past_90: number | string;
+  stly_revenue_past_90: number | string;
+  mpi_next_7: number;
+  mpi_next_30: number;
+  mpi_next_60: number;
+  mpi_next_120: number;
+  min_prices_next_30: string;
+  min_prices_next_60: string;
+  revpar_next_60: number | string;
+  stly_revpar_next_60: number | string;
+  revpar_next_30: number | string;
+  stly_revpar_next_30: number | string;
+  recommended_base_price: number | string;
+  last_refreshed_at: string | null;
+}
+
+export interface ListingsData {
+  listings: Listing[];
+}
+
+export type Timeframe = 7 | 30 | 60 | 90 | 120;
+
+export interface MPISummary {
+  group: string;
+  mpi_7: number;
+  mpi_30: number;
+  mpi_60: number;
+  mpi_90: number;
+  mpi_120: number;
+  listingCount: number;
+}
+
+export interface CalculatedMPI {
+  listingId: string;
+  group: string;
+  mpi_7: number;
+  mpi_30: number;
+  mpi_60: number;
+  mpi_90: number;
+  mpi_120: number;
+}
