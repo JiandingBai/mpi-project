@@ -13,15 +13,18 @@ export default async function handler(
   try {
     console.log('API: Starting MPI calculation...');
     
-    // Load both listings and neighborhood data
+    // Get grouping parameter from query string, default to 'city'
+    const grouping = req.query.grouping as string || 'city';
+    
     const [listingsData, neighborhoodData] = await Promise.all([
       loadListingsData(),
       loadNeighborhoodData()
     ]);
     
     console.log(`API: Loaded ${listingsData.listings.length} listings and neighborhood data`);
+    console.log(`API: Using grouping: ${grouping}`);
     
-    const { summaries, calculatedMPIs, calculationStats } = calculateMPISummaries(listingsData, neighborhoodData);
+    const { summaries, calculatedMPIs, calculationStats } = calculateMPISummaries(listingsData, neighborhoodData, grouping);
     
     console.log(`API: Calculated ${summaries.length} group summaries`);
     
@@ -32,6 +35,7 @@ export default async function handler(
         calculatedMPIs,
         totalListings: listingsData.listings.length,
         totalGroups: summaries.length,
+        grouping,
         neighborhoodInfo: {
           categories: Object.keys(neighborhoodData.data["Market KPI"].Category).length,
           location: {
@@ -46,7 +50,6 @@ export default async function handler(
   } catch (error) {
     console.error('API Error:', error);
     
-    // Return a more detailed error response
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     
     res.status(500).json({ 

@@ -42,6 +42,24 @@ function getDateRangeForTimeframe(timeframe: Timeframe): { start: Date; end: Dat
 }
 
 /**
+ * Get a key for grouping listings, based on the selected grouping method
+ */
+function getGroupKey(listing: Listing, grouping: string): string {
+  switch (grouping) {
+    case 'bedrooms':
+      return `${listing.no_of_bedrooms} Bedroom${listing.no_of_bedrooms !== 1 ? 's' : ''}`;
+    case 'city':
+      return listing.city_name || 'Unknown City';
+    case 'city-bedrooms':
+      const city = listing.city_name || 'Unknown City';
+      const bedrooms = listing.no_of_bedrooms;
+      return `${city}-${bedrooms}BR`;
+    default:
+      return listing.group || 'Unknown';
+  }
+}
+
+/**
  * Calculate MPI for a single listing using neighborhood data
  */
 function calculateListingMPI(
@@ -127,20 +145,22 @@ function calculateFallbackMPI(listing: Listing, timeframe: Timeframe): number {
 /**
  * Groups listings by group and calculates average MPI for each group
  */
-function calculateGroupAverages(calculatedMPIs: CalculatedMPI[]): MPISummary[] {
+function calculateGroupAverages(calculatedMPIs: CalculatedMPI[], grouping: string, listingsData: ListingsData): MPISummary[] {
   const groupMap = new Map<string, CalculatedMPI[]>();
   
-  // Group by group name
   calculatedMPIs.forEach(mpi => {
-    if (!groupMap.has(mpi.group)) {
-      groupMap.set(mpi.group, []);
+    // Find the original listing to get the grouping data
+    const originalListing = listingsData.listings.find(listing => listing.id === mpi.listingId);
+    if (originalListing) {
+      const groupKey = getGroupKey(originalListing, grouping);
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, []);
+      }
+      groupMap.get(groupKey)!.push(mpi);
     }
-    groupMap.get(mpi.group)!.push(mpi);
   });
   
-  // Calculate averages for each group
   const summaries: MPISummary[] = [];
-  
   groupMap.forEach((mpis, groupName) => {
     const count = mpis.length;
     const mpi_7 = mpis.reduce((sum, mpi) => sum + mpi.mpi_7, 0) / count;
@@ -151,7 +171,7 @@ function calculateGroupAverages(calculatedMPIs: CalculatedMPI[]): MPISummary[] {
     
     summaries.push({
       group: groupName,
-      mpi_7: Math.round(mpi_7 * 100) / 100, // Round to 2 decimal places
+      mpi_7: Math.round(mpi_7 * 100) / 100,
       mpi_30: Math.round(mpi_30 * 100) / 100,
       mpi_60: Math.round(mpi_60 * 100) / 100,
       mpi_90: Math.round(mpi_90 * 100) / 100,
@@ -159,8 +179,6 @@ function calculateGroupAverages(calculatedMPIs: CalculatedMPI[]): MPISummary[] {
       listingCount: count,
     });
   });
-  
-  // Sort by group name
   return summaries.sort((a, b) => a.group.localeCompare(b.group));
 }
 
@@ -169,7 +187,8 @@ function calculateGroupAverages(calculatedMPIs: CalculatedMPI[]): MPISummary[] {
  */
 export function calculateMPISummaries(
   listingsData: ListingsData, 
-  neighborhoodData: NeighborhoodData
+  neighborhoodData: NeighborhoodData,
+  grouping: string = 'city'
 ): {
   summaries: MPISummary[];
   calculatedMPIs: CalculatedMPI[];
@@ -215,7 +234,7 @@ export function calculateMPISummaries(
     return mpi;
   });
   
-  const summaries = calculateGroupAverages(calculatedMPIs);
+  const summaries = calculateGroupAverages(calculatedMPIs, grouping, listingsData);
   
   return { 
     summaries, 

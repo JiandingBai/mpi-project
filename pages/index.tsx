@@ -7,6 +7,7 @@ interface HomeProps {
     summaries: MPISummary[];
     totalListings: number;
     totalGroups: number;
+    grouping: string;
     neighborhoodInfo: {
       categories: number;
       location: {
@@ -30,6 +31,7 @@ export default function Home({ initialData }: HomeProps) {
   const [calculationStats, setCalculationStats] = useState(initialData.calculationStats);
   const [totalListings, setTotalListings] = useState(initialData.totalListings);
   const [totalGroups, setTotalGroups] = useState(initialData.totalGroups);
+  const [grouping, setGrouping] = useState(initialData.grouping);
   const [loading, setLoading] = useState(false);
 
   // Client-side data fetching as fallback
@@ -48,6 +50,7 @@ export default function Home({ initialData }: HomeProps) {
             setCalculationStats(result.data.calculationStats);
             setTotalListings(result.data.totalListings);
             setTotalGroups(result.data.totalGroups);
+            setGrouping(result.data.grouping);
           }
         } catch (error) {
           console.error('Client-side fetch error:', error);
@@ -59,6 +62,25 @@ export default function Home({ initialData }: HomeProps) {
 
     fetchData();
   }, [summaries.length]);
+
+  // Handle grouping change
+  const handleGroupingChange = async (newGrouping: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/mpi?grouping=${newGrouping}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setSummaries(result.data.summaries);
+        setTotalGroups(result.data.totalGroups);
+        setGrouping(result.data.grouping);
+      }
+    } catch (error) {
+      console.error('Error fetching data with new grouping:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Log to console as requested
@@ -107,6 +129,31 @@ export default function Home({ initialData }: HomeProps) {
               <p>Market data source: {neighborhoodInfo.source}</p>
               <p>Neighborhood categories: {neighborhoodInfo.categories}</p>
               <p>Location: {neighborhoodInfo.location.lat.toFixed(4)}, {neighborhoodInfo.location.lng.toFixed(4)}</p>
+            </div>
+          </div>
+          
+          {/* Grouping Dropdown */}
+          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <label htmlFor="grouping" className="block text-sm font-medium text-gray-700 mb-2">
+                  Group By:
+                </label>
+                <select
+                  id="grouping"
+                  value={grouping}
+                  onChange={(e) => handleGroupingChange(e.target.value)}
+                  className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="city">City</option>
+                  <option value="bedrooms">Bedrooms</option>
+                  <option value="city-bedrooms">City + Bedrooms</option>
+                </select>
+              </div>
+              <div className="text-sm text-gray-600">
+                <p><strong>Current Grouping:</strong> {grouping}</p>
+                <p><strong>Total Groups:</strong> {totalGroups}</p>
+              </div>
             </div>
           </div>
           
@@ -210,7 +257,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     // Determine the correct API URL based on environment
     const protocol = context.req.headers['x-forwarded-proto'] || 'http';
     const host = context.req.headers.host || 'localhost:3000';
-    const apiUrl = `${protocol}://${host}/api/mpi`;
+    
+    // Get grouping parameter from query string, default to 'city'
+    const grouping = context.query.grouping as string || 'city';
+    const apiUrl = `${protocol}://${host}/api/mpi?grouping=${grouping}`;
     
     // Call the API endpoint from the server
     const response = await fetch(apiUrl);
@@ -223,6 +273,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
             summaries: result.data.summaries,
             totalListings: result.data.totalListings,
             totalGroups: result.data.totalGroups,
+            grouping: result.data.grouping,
             neighborhoodInfo: result.data.neighborhoodInfo,
             calculationStats: result.data.calculationStats,
           },
@@ -239,6 +290,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           summaries: [],
           totalListings: 0,
           totalGroups: 0,
+          grouping: 'city',
           neighborhoodInfo: {
             categories: 0,
             location: { lat: 0, lng: 0 },
