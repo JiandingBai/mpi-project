@@ -47,9 +47,8 @@ mpi-project/
 ├── public/
 │   ├── listings.json        # Fallback listings data
 │   └── neighborhood.json    # Fallback neighborhood data
-├── PROJECT_REPORT.md        # Comprehensive project report
-├── DEVELOPMENT_LOG.md       # Technical development details
-└── DEVELOPMENT_TIMELINE.md  # Combined developer experience
+├── PROJECT_SUMMARY.md       # Complete project overview & development timeline  
+└── TECHNICAL_DOCS.md        # Technical implementation details
 ```
 
 ## 🔗 API Integration
