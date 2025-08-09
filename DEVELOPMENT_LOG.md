@@ -155,7 +155,6 @@ if (Y_values[0].every(val => val === 0)) {
 #### Issue 3: Wrong Data Section Usage
 **Problem**: Using "Future Percentile Prices" for occupancy data  
 **Root Cause**: "Future Percentile Prices" contains price data, not occupancy  
-**User Feedback**: "i don't think we should use Future Percentile Prices at all"  
 **Solution**: Removed all fallback to price data, use only "Future Occ/New/Canc"
 
 #### Key Code Changes:
@@ -253,9 +252,9 @@ export async function calculateListingMPIComparison(listing: Listing): Promise<M
 #### Issue: Future vs Historical Data Mismatch
 **Problem**: MPI calculation requires same time periods, but property data is historical while market data is future-looking
 
-**User Clarification**: 
-- "today is 2025-08-08"
-- "my sample neighbourhood data start at 2025-08-07 pretty much just today"
+**Clarification**: 
+- Current date is 2025-08-08
+- Sample neighbourhood data starts at 2025-08-07 (current timeframe)
 
 **Solution**: Updated date range calculation
 ```typescript
