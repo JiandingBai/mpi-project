@@ -149,6 +149,22 @@ export async function loadNeighborhoodData(listingId: string): Promise<Neighborh
       lat: 42.7645,
       lng: -76.1467,
       source: "airbnb",
+      "Market KPI": {
+        Category: {
+          "0": {
+            X_values: ["Aug 2024"],
+            Y_values: [[80]]
+          }
+        }
+      },
+      "Future Percentile Prices": {
+        Category: {
+          "0": {
+            X_values: ["2025-08-07"],
+            Y_values: [[200]]
+          }
+        }
+      },
       "Future Occ/New/Canc": {
         Category: {
           "0": {
@@ -257,11 +273,11 @@ function calculateMarketOccupancyFromCategory(
   
   // In Future Occ/New/Canc, Y_values[0] should be occupancy data
   const occupancyYIndex = 0;
-  console.log(`🔍 Y_values info: arrays=${Y_values.length}, lengths=[${Y_values.map(arr => arr?.length || 0).join(', ')}]`);
+  console.log(`🔍 Y_values info: arrays=${Y_values.length}, lengths=[${Y_values.map((arr: any) => arr?.length || 0).join(', ')}]`);
   
   if (relevantIndices.length > 0) {
     const firstIndex = relevantIndices[0];
-    console.log(`🔍 Sample Y_values at index ${firstIndex}: [${Y_values.map((arr, i) => `Y[${i}]=${arr?.[firstIndex] ?? 'undefined'}`).join(', ')}]`);
+    console.log(`🔍 Sample Y_values at index ${firstIndex}: [${Y_values.map((arr: any, i: number) => `Y[${i}]=${arr?.[firstIndex] ?? 'undefined'}`).join(', ')}]`);
     
     // Check for nested structure
     if (Y_values[0] && Y_values[0][0]) {
@@ -312,19 +328,10 @@ export function calculatePropertyOccupancy(
   startDate: Date,
   endDate: Date
 ): number {
-  // Note: For MPI calculations, we're looking at future periods but only have past occupancy data
-  // This is a limitation of the available data. We use the best available approximation.
-  const now = new Date();
-  const daysDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (daysDiff <= 30) {
-    return extractPercentage(listing.adjusted_occupancy_past_30);
-  } else if (daysDiff <= 90) {
-    return extractPercentage(listing.adjusted_occupancy_past_90);
-  } else {
-    // For longer periods, use 90-day historical as best approximation
-    return extractPercentage(listing.adjusted_occupancy_past_90);
-  }
+  // Note: For MPI calculations, we're comparing future market occupancy with property occupancy.
+  // Since we only have historical property data, we use the most recent occupancy (past 30 days)
+  // as the best predictor of future property performance across all timeframes.
+  return extractPercentage(listing.adjusted_occupancy_past_30);
 }
 
 function extractPercentage(value: string): number {

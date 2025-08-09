@@ -171,11 +171,12 @@ export default function Home({ initialData }: HomeProps) {
                     id="grouping"
                     value={grouping}
                     onChange={(e) => handleGroupingChange(e.target.value)}
-                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-medium bg-white"
+                    style={{ color: '#1f2937' }}
                   >
-                    <option value="city">City</option>
-                    <option value="bedrooms">Bedrooms</option>
-                    <option value="city-bedrooms">City + Bedrooms</option>
+                    <option value="city" style={{ color: '#1f2937', backgroundColor: 'white' }}>City</option>
+                    <option value="bedrooms" style={{ color: '#1f2937', backgroundColor: 'white' }}>Bedrooms</option>
+                    <option value="city-bedrooms" style={{ color: '#1f2937', backgroundColor: 'white' }}>City + Bedrooms</option>
                   </select>
                 </div>
                 <div>
@@ -186,10 +187,11 @@ export default function Home({ initialData }: HomeProps) {
                     id="mode"
                     value={mode}
                     onChange={(e) => handleModeChange(e.target.value as 'normal' | 'comparison')}
-                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-medium bg-white"
+                    style={{ color: '#1f2937' }}
                   >
-                    <option value="normal">Normal (API MPI)</option>
-                    <option value="comparison">Comparison Mode</option>
+                    <option value="normal" style={{ color: '#1f2937', backgroundColor: 'white' }}>Normal (API MPI)</option>
+                    <option value="comparison" style={{ color: '#1f2937', backgroundColor: 'white' }}>Comparison Mode</option>
                   </select>
                 </div>
               </div>
