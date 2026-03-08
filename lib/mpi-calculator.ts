@@ -440,21 +440,41 @@ export async function calculateMPISummaries(
     listingsData.listings.map(async (listing) => {
       const mpi = await calculateListingMPI(listing);
       
-      // Count calculation methods used
+      // Count calculation methods used PER LISTING (not per timeframe)
+      // Check if this listing used API values, neighborhood calculation, or had no data
       const timeframes: Timeframe[] = [7, 30, 60, 90, 120];
+      
+      let hasAnyAPIValue = false;
+      let hasAnyNeighborhoodValue = false;
+      let hasAnyData = false;
+      
+      // Check each timeframe to determine the primary calculation method for this listing
       timeframes.forEach(timeframe => {
         const mpiField = `mpi_next_${timeframe}` as keyof Listing;
         const existingMPI = listing[mpiField] as number;
         
-        if (existingMPI !== undefined && existingMPI !== null && existingMPI >= 0) {
-          existingMPIUsed++;
-        } else {
-          // Check if we calculated from neighborhood data or had no data
-          // This is a simplified check - in reality we'd track this during calculation
-          // For now, we'll assume no data was available if no existing MPI
-          noDataAvailable++;
+        if (existingMPI !== undefined && existingMPI !== null) {
+          hasAnyAPIValue = true;
+          hasAnyData = true;
+        }
+        
+        // Check if we calculated from neighborhood data
+        // (In practice, if API value exists, we use it; otherwise we calculate)
+        if (existingMPI === undefined || existingMPI === null) {
+          // Would have used neighborhood calculation
+          hasAnyNeighborhoodValue = true;
+          hasAnyData = true;
         }
       });
+      
+      // Increment counters ONCE per listing based on primary method
+      if (hasAnyAPIValue) {
+        existingMPIUsed++;
+      } else if (hasAnyNeighborhoodValue) {
+        neighborhoodCalculated++;
+      } else if (!hasAnyData) {
+        noDataAvailable++;
+      }
       
       return mpi;
     })
@@ -463,10 +483,11 @@ export async function calculateMPISummaries(
   const summaries = calculateGroupAverages(calculatedMPIs, grouping, listingsData);
   
   console.log(`✅ Completed MPI calculations:`);
-  console.log(`  - Existing MPI used: ${existingMPIUsed}`);
-  console.log(`  - Neighborhood calculated: ${neighborhoodCalculated}`);
-  console.log(`  - No data available: ${noDataAvailable}`);
-  console.log(`  - Total calculations: ${existingMPIUsed + neighborhoodCalculated + noDataAvailable}`);
+  console.log(`  - Listings using existing API MPI: ${existingMPIUsed}`);
+  console.log(`  - Listings using neighborhood calculation: ${neighborhoodCalculated}`);
+  console.log(`  - Listings with no data available: ${noDataAvailable}`);
+  console.log(`  - Total listings processed: ${listingsData.listings.length}`);
+  console.log(`  - Verification: ${existingMPIUsed + neighborhoodCalculated + noDataAvailable} listings accounted for`);
   
   return { 
     summaries, 
