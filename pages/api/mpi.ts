@@ -1,6 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { calculateMPISummaries, calculateMPIComparisons } from '../../lib/mpi-calculator';
-import { loadListingsData } from '../../lib/data-loader';
 
 export default async function handler(
   req: NextApiRequest,
@@ -17,16 +16,12 @@ export default async function handler(
     const grouping = req.query.grouping as string || 'city';
     const compare = req.query.compare === 'true';
     
-    // Load listings data (now includes PriceLabs API integration)
-    const listingsData = await loadListingsData();
-    
-    console.log(`API: Loaded ${listingsData.listings.length} listings`);
     console.log(`API: Using grouping: ${grouping}`);
     console.log(`API: Comparison mode: ${compare}`);
 
     if (compare) {
       // Calculate MPI comparisons (API vs neighborhood calculations)
-      const { summaries: comparisonSummaries, comparisons } = await calculateMPIComparisons(listingsData, grouping);
+      const { summaries: comparisonSummaries, comparisons } = await calculateMPIComparisons(grouping);
 
       console.log(`API: Calculated ${comparisonSummaries.length} comparison group summaries`);
 
@@ -36,7 +31,7 @@ export default async function handler(
         data: {
           summaries: comparisonSummaries,
           comparisons,
-          totalListings: listingsData.listings.length,
+          totalListings: comparisons.length,
           totalGroups: comparisonSummaries.length,
           grouping,
           neighborhoodInfo: {
@@ -48,7 +43,7 @@ export default async function handler(
       });
     } else {
       // Calculate MPI summaries (normal mode)
-      const { summaries, calculatedMPIs, calculationStats } = await calculateMPISummaries(listingsData, grouping);
+      const { summaries, calculatedMPIs, calculationStats } = await calculateMPISummaries(grouping);
       
       console.log(`API: Calculated ${summaries.length} group summaries`);
       
@@ -58,7 +53,7 @@ export default async function handler(
         data: {
           summaries,
           calculatedMPIs,
-          totalListings: listingsData.listings.length,
+          totalListings: calculatedMPIs.length,
           totalGroups: summaries.length,
           grouping,
           neighborhoodInfo: {
