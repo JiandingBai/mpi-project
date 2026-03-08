@@ -17,6 +17,23 @@ import {
 } from './data-loader';
 
 /**
+ * MPI Scaling Factor
+ * 
+ * The PriceLabs API returns MPI values in the range 0-2 (e.g., 1.73):
+ * - 0.0 = 0% of market average (no occupancy)
+ * - 1.0 = 100% of market average (at market)
+ * - 2.0 = 200% of market average (double the market)
+ * 
+ * For display purposes, we multiply by 100 to convert to 0-200 range:
+ * - 0 = 0% of market average
+ * - 100 = 100% of market average (at market)
+ * - 200 = 200% of market average
+ * 
+ * This makes the values more intuitive for users (173 instead of 1.73).
+ */
+const MPI_SCALE_FACTOR = 100;
+
+/**
  * Calculate date range for a given timeframe (FUTURE-looking from today)
  */
 function getDateRangeForTimeframe(timeframe: Timeframe): { start: Date; end: Date } {
@@ -76,10 +93,9 @@ async function calculateListingMPI(
     const existingMPI = listing[mpiField] as number;
     
     // Priority 1: Use API MPI if available (including 0 as valid value)
-    // Note: API returns MPI in 0-2 range (e.g., 1.73 means 173% of market)
-    // Multiply by 100 to convert to 0-200 display range (173 = 173% of market)
+    // API returns MPI in 0-2 range, multiply by MPI_SCALE_FACTOR to convert to 0-200 display range
     if (existingMPI !== undefined && existingMPI !== null) {
-      const scaledMPI = existingMPI * 100;
+      const scaledMPI = existingMPI * MPI_SCALE_FACTOR;
       console.log(`📊 Using API MPI for ${timeframe}-day (listing ${listing.id}): ${scaledMPI.toFixed(2)}`);
       return scaledMPI;
     }
@@ -103,8 +119,9 @@ async function calculateListingMPI(
         const marketOccupancy = calculateMarketOccupancy(neighborhoodData, categoryId, dateRange.start, dateRange.end);
         
         // Calculate MPI: (property_occupancy / market_occupancy) * 100
+        // Note: Result is already in 0-200 range (same scale as API values after MPI_SCALE_FACTOR)
         if (marketOccupancy > 0) {
-          const calculatedMPI = (propertyOccupancy / marketOccupancy) * 100;
+          const calculatedMPI = (propertyOccupancy / marketOccupancy) * MPI_SCALE_FACTOR;
           console.log(`✅ Calculated MPI ${timeframe}-day from neighborhood data for listing ${listing.id}: ${calculatedMPI.toFixed(2)} (property: ${(propertyOccupancy * 100).toFixed(1)}%, market: ${(marketOccupancy * 100).toFixed(1)}%)`);
           return calculatedMPI;
         }
@@ -125,6 +142,19 @@ async function calculateListingMPI(
     getMPI(90),
     getMPI(120)
   ]);
+  
+  // Validate MPI values are in expected range (0-500 is reasonable, >500 suggests data issue)
+  const validateMPI = (value: number, timeframe: Timeframe) => {
+    if (value < 0 || value > 500) {
+      console.warn(`⚠️ MPI value out of expected range for ${timeframe}-day (listing ${listing.id}): ${value.toFixed(2)} (expected 0-500)`);
+    }
+  };
+  
+  validateMPI(mpi_7, 7);
+  validateMPI(mpi_30, 30);
+  validateMPI(mpi_60, 60);
+  validateMPI(mpi_90, 90);
+  validateMPI(mpi_120, 120);
   
   return {
     listingId: listing.id,
@@ -195,8 +225,9 @@ function calculateListingMPIFromNeighborhood(listing: Listing, neighborhoodData:
         const marketOccupancy = calculateMarketOccupancy(neighborhoodData, categoryId, dateRange.start, dateRange.end);
         
         // Calculate MPI: (property_occupancy / market_occupancy) * 100
+        // Note: Result is already in 0-200 range (same scale as API values after MPI_SCALE_FACTOR)
         if (marketOccupancy > 0) {
-          const calculatedMPI = (propertyOccupancy / marketOccupancy) * 100;
+          const calculatedMPI = (propertyOccupancy / marketOccupancy) * MPI_SCALE_FACTOR;
           console.log(`✅ Calculated MPI ${timeframe}-day for listing ${listing.id}: ${calculatedMPI.toFixed(2)} (property: ${(propertyOccupancy * 100).toFixed(1)}%, market: ${(marketOccupancy * 100).toFixed(1)}%)`);
           return calculatedMPI;
         }
@@ -229,12 +260,12 @@ function calculateListingMPIFromNeighborhood(listing: Listing, neighborhoodData:
  * Calculate MPI comparison between API values and neighborhood calculations
  */
 function calculateListingMPIComparison(listing: Listing, neighborhoodData: NeighborhoodData): MPIComparison {
-  // Get API MPI values and scale by 100 to match industry standard
-  const api_mpi_7 = (listing.mpi_next_7 ?? 0) * 100;
-  const api_mpi_30 = (listing.mpi_next_30 ?? 0) * 100;
-  const api_mpi_60 = (listing.mpi_next_60 ?? 0) * 100;
-  const api_mpi_90 = (listing.mpi_next_90 ?? 0) * 100;
-  const api_mpi_120 = (listing.mpi_next_120 ?? 0) * 100;
+  // Get API MPI values and scale by MPI_SCALE_FACTOR to convert to 0-200 display range
+  const api_mpi_7 = (listing.mpi_next_7 ?? 0) * MPI_SCALE_FACTOR;
+  const api_mpi_30 = (listing.mpi_next_30 ?? 0) * MPI_SCALE_FACTOR;
+  const api_mpi_60 = (listing.mpi_next_60 ?? 0) * MPI_SCALE_FACTOR;
+  const api_mpi_90 = (listing.mpi_next_90 ?? 0) * MPI_SCALE_FACTOR;
+  const api_mpi_120 = (listing.mpi_next_120 ?? 0) * MPI_SCALE_FACTOR;
 
   // Calculate MPI from neighborhood data
   const calculated = calculateListingMPIFromNeighborhood(listing, neighborhoodData);
