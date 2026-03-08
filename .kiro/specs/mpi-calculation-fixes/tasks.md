@@ -4,7 +4,7 @@
 
 ### Bug #1: Property vs Market Occupancy Mismatch
 
-- [ ] 1.1 Write bug condition exploration test
+- [x] 1.1 Write bug condition exploration test
   - **Property 1: Bug Condition** - Property Occupancy Ignores Date Range
   - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
   - **DO NOT attempt to fix the test or the code when it fails**
