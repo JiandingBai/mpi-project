@@ -35,31 +35,40 @@ const MPI_SCALE_FACTOR = 100;
 
 /**
  * Calculate date range for a given timeframe (FUTURE-looking from today)
+ * 
+ * Returns an inclusive date range [start, end] covering exactly N days.
+ * For example, a 7-day range from March 8 includes: Mar 8, 9, 10, 11, 12, 13, 14 (7 days total)
  */
 function getDateRangeForTimeframe(timeframe: Timeframe): { start: Date; end: Date } {
   const today = new Date();
   console.log(`📅 Today's date: ${today.toISOString().split('T')[0]}`);
   
-  const start = new Date(today); // Start from today
+  const start = new Date(today); // Start from today (day 1)
   const end = new Date(today);
   
+  // For an N-day range starting today:
+  // - Day 1 is today (start)
+  // - Day N is today + (N-1) days (end)
+  // This creates an inclusive range covering exactly N days
   switch (timeframe) {
     case 7:
-      end.setDate(start.getDate() + 7 - 1); // Next 7 days (Aug 8-14)
+      end.setDate(start.getDate() + 6); // Today + 6 more days = 7 days total
       break;
     case 30:
-      end.setDate(start.getDate() + 30 - 1); // Next 30 days
+      end.setDate(start.getDate() + 29); // Today + 29 more days = 30 days total
       break;
     case 60:
-      end.setDate(start.getDate() + 60 - 1); // Next 60 days
+      end.setDate(start.getDate() + 59); // Today + 59 more days = 60 days total
       break;
     case 90:
-      end.setDate(start.getDate() + 90 - 1); // Next 90 days
+      end.setDate(start.getDate() + 89); // Today + 89 more days = 90 days total
       break;
     case 120:
-      end.setDate(start.getDate() + 120 - 1); // Next 120 days
+      end.setDate(start.getDate() + 119); // Today + 119 more days = 120 days total
       break;
   }
+  
+  console.log(`📅 ${timeframe}-day range: ${start.toISOString().split('T')[0]} to ${end.toISOString().split('T')[0]}`);
   
   return { start, end };
 }
