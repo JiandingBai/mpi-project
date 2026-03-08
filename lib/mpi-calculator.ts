@@ -127,6 +127,12 @@ async function calculateListingMPI(
         // Calculate market occupancy from real neighborhood data
         const marketOccupancy = calculateMarketOccupancy(neighborhoodData, categoryId, dateRange.start, dateRange.end);
         
+        // Validate market occupancy to prevent division by zero
+        if (marketOccupancy === 0) {
+          console.warn(`⚠️ Market occupancy is zero for ${timeframe}-day (listing ${listing.id}), cannot calculate MPI`);
+          return 0;
+        }
+        
         // Calculate MPI: (property_occupancy / market_occupancy) * 100
         // Note: Result is already in 0-200 range (same scale as API values after MPI_SCALE_FACTOR)
         if (marketOccupancy > 0) {

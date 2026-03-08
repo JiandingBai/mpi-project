@@ -234,12 +234,26 @@ function calculateMarketOccupancyFromCategory(
       if (dateStr === "Last 365 Days" || dateStr === "Last 730 Days") continue;
       
       try {
-        const date = new Date(dateStr);
+        // Validate date string before parsing
+        if (!dateStr || typeof dateStr !== 'string') {
+          console.warn(`⚠️ Invalid date string at index ${i}: ${dateStr}`);
+          continue;
+        }
+        
+        // Use UTC timezone for consistent date handling
+        const date = new Date(dateStr + 'T00:00:00Z');
+        
+        // Check if parsed date is valid
+        if (isNaN(date.getTime())) {
+          console.warn(`⚠️ Invalid date parsed from "${dateStr}" at index ${i}`);
+          continue;
+        }
+        
         if (date >= startDate && date <= endDate) {
           relevantIndices.push(i);
         }
       } catch (error) {
-        // Skip invalid dates
+        console.warn(`⚠️ Error parsing date "${dateStr}" at index ${i}:`, error);
         continue;
       }
     }
@@ -264,7 +278,7 @@ function calculateMarketOccupancyFromCategory(
   }
   
   if (relevantIndices.length === 0) {
-    console.log(`❌ No relevant dates found for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+    console.warn(`⚠️ No relevant dates found for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} in category ${categoryId}`);
     return 0;
   }
   
@@ -311,6 +325,13 @@ function calculateMarketOccupancyFromCategory(
     }
     
     if (occupancyValue !== undefined && occupancyValue !== null && occupancyValue > 0) {
+      // Validate occupancy value is in reasonable range (0-100 for percentage)
+      if (occupancyValue < 0 || occupancyValue > 100) {
+        console.warn(`⚠️ Occupancy value out of range at index ${index} (${X_values[index]}): ${occupancyValue}% (expected 0-100)`);
+        // Clamp to valid range
+        occupancyValue = Math.max(0, Math.min(100, occupancyValue));
+      }
+      
       // Convert to decimal (divide by 100 for percentages)
       totalOccupancy += occupancyValue / 100;
       count++;
@@ -318,6 +339,12 @@ function calculateMarketOccupancyFromCategory(
   }
   
   const avgOccupancy = count > 0 ? totalOccupancy / count : 0;
+  
+  // Final sanity check on calculated average occupancy
+  if (avgOccupancy < 0 || avgOccupancy > 1) {
+    console.warn(`⚠️ Calculated average occupancy out of range: ${(avgOccupancy * 100).toFixed(1)}% (expected 0-100%)`);
+    return Math.max(0, Math.min(1, avgOccupancy));
+  }
   console.log(`🔍 Market occupancy result: total=${totalOccupancy}, count=${count}, avg=${avgOccupancy} (${(avgOccupancy*100).toFixed(1)}%)`);
   
   return avgOccupancy;
