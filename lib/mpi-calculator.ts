@@ -75,14 +75,18 @@ async function calculateListingMPI(
     const mpiField = `mpi_next_${timeframe}` as keyof Listing;
     const existingMPI = listing[mpiField] as number;
     
-    // Priority 1: If existing MPI is available and valid, use it
-    // Note: 0.0 is a valid MPI value (means 0% of market occupancy)
-    // Scale by 100 to match industry standard (~100)
-    if (existingMPI !== undefined && existingMPI !== null && existingMPI >= 0) {
-      return existingMPI * 100;
+    // Priority 1: Use API MPI if available (including 0 as valid value)
+    // Note: API returns MPI in 0-2 range (e.g., 1.73 means 173% of market)
+    // Multiply by 100 to convert to 0-200 display range (173 = 173% of market)
+    if (existingMPI !== undefined && existingMPI !== null) {
+      const scaledMPI = existingMPI * 100;
+      console.log(`📊 Using API MPI for ${timeframe}-day (listing ${listing.id}): ${scaledMPI.toFixed(2)}`);
+      return scaledMPI;
     }
     
-    // Priority 2: Try to calculate using real neighborhood data from PriceLabs API
+    // Priority 2: Calculate from neighborhood data if API value missing
+    console.log(`🔄 API MPI not available for ${timeframe}-day (listing ${listing.id}), calculating from neighborhood data...`);
+    
     try {
       const dateRange = getDateRangeForTimeframe(timeframe);
       
@@ -101,7 +105,7 @@ async function calculateListingMPI(
         // Calculate MPI: (property_occupancy / market_occupancy) * 100
         if (marketOccupancy > 0) {
           const calculatedMPI = (propertyOccupancy / marketOccupancy) * 100;
-          console.log(`✅ Calculated MPI ${timeframe}-day for listing ${listing.id}: ${calculatedMPI.toFixed(2)} (property: ${(propertyOccupancy * 100).toFixed(1)}%, market: ${(marketOccupancy * 100).toFixed(1)}%)`);
+          console.log(`✅ Calculated MPI ${timeframe}-day from neighborhood data for listing ${listing.id}: ${calculatedMPI.toFixed(2)} (property: ${(propertyOccupancy * 100).toFixed(1)}%, market: ${(marketOccupancy * 100).toFixed(1)}%)`);
           return calculatedMPI;
         }
       }

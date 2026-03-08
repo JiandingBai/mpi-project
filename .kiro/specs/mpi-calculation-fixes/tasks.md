@@ -177,7 +177,7 @@
 
 - [ ] 3.2 Fix neighborhood fallback condition logic
 
-  - [ ] 3.2.1 Update `calculateListingMPI()` in `lib/mpi-calculator.ts`
+  - [x] 3.2.1 Update `calculateListingMPI()` in `lib/mpi-calculator.ts`
     - Change condition to properly detect when API MPI is genuinely unavailable
     - Consider 0 as a valid MPI value (property has 0% occupancy)
     - Only fall back to neighborhood calculation if API value is truly missing (undefined/null)
