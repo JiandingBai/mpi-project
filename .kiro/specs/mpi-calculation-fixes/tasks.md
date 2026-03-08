@@ -21,7 +21,7 @@
 
 ### Bug #2: Dead Code Path
 
-- [ ] 1.2 Write bug condition exploration test
+- [x] 1.2 Write bug condition exploration test
   - **Property 1: Bug Condition** - Neighborhood Fallback Never Executes
   - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
   - **DO NOT attempt to fix the test or the code when it fails**
@@ -38,7 +38,7 @@
 
 ### Bug #3: Inconsistent Scaling Logic
 
-- [ ] 1.3 Write bug condition exploration test
+- [x] 1.3 Write bug condition exploration test
   - **Property 1: Bug Condition** - API and Calculated MPI Use Different Scales
   - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
   - **DO NOT attempt to fix the test or the code when it fails**
@@ -72,7 +72,7 @@
 
 ### Bug #5: Date Range Off-by-One Bug
 
-- [ ] 1.5 Write bug condition exploration test
+- [x] 1.5 Write bug condition exploration test
   - **Property 1: Bug Condition** - Date Ranges One Day Short
   - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
   - **DO NOT attempt to fix the test or the code when it fails**
