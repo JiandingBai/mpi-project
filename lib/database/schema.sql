@@ -20,3 +20,14 @@ CREATE TABLE IF NOT EXISTS neighborhood_data (
 -- Index for checking data freshness
 CREATE INDEX IF NOT EXISTS idx_listings_updated ON listings(updated_at);
 CREATE INDEX IF NOT EXISTS idx_neighborhood_updated ON neighborhood_data(updated_at);
+
+-- Reservations cache table
+CREATE TABLE IF NOT EXISTS reservations (
+  listing_id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for checking reservations data freshness
+CREATE INDEX IF NOT EXISTS idx_reservations_updated ON reservations(updated_at);

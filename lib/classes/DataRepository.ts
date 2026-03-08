@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { ListingsData, NeighborhoodData } from '../../types';
+import { ListingsData, NeighborhoodData, ReservationsData } from '../../types';
 import { logger } from '../logger';
 import { isCacheFresh } from '../database/init';
 
@@ -64,6 +64,41 @@ export class DataRepository {
     // Final fallback: JSON files
     logger.fallbackUsed('JSON files', 'API and database unavailable');
     return await this.tryLoadNeighborhoodFromFile();
+  }
+  /**
+   * Load reservations data with fallback strategy
+   */
+  async loadReservations(listingId: string): Promise<ReservationsData | null> {
+    // Try database cache first (if fresh)
+    const cachedData = this.tryLoadReservationsFromCache(listingId);
+    if (cachedData) {
+      console.log(`✅ Loaded reservations from database cache (listing: ${listingId})`);
+      return cachedData;
+    }
+
+    // Try API
+    const apiData = await this.tryLoadReservationsFromAPI(listingId);
+    if (apiData) {
+      this.saveReservationsToCache(listingId, apiData);
+      return apiData;
+    }
+
+    // Try database cache even if stale (better than nothing)
+    const staleData = this.tryLoadReservationsFromCache(listingId, true);
+    if (staleData) {
+      logger.fallbackUsed('Stale database cache', 'API unavailable');
+      return staleData;
+    }
+
+    // Final fallback: JSON files
+    const fileData = await this.tryLoadReservationsFromFile(listingId);
+    if (fileData) {
+      logger.fallbackUsed('JSON files', 'API and database unavailable');
+      return fileData;
+    }
+
+    // No data available
+    return null;
   }
 
   /**
@@ -289,4 +324,133 @@ export class DataRepository {
       console.log('❌ Failed to cache neighborhood data:', error);
     }
   }
+
+    /**
+     * Try loading reservations from PriceLabs API
+     */
+    private async tryLoadReservationsFromAPI(listingId: string): Promise<ReservationsData | null> {
+      if (typeof window !== 'undefined') return null; // Only on server-side
+
+      try {
+        const apiKey = process.env.PRICELABS_API_KEY;
+        if (!apiKey) return null;
+
+        const url = `https://api.pricelabs.co/v1/reservations?listing_id=${listingId}&api_key=${apiKey}`;
+        logger.apiCall('GET', url);
+        console.log(`🔗 Trying PriceLabs API for reservations (listing: ${listingId})...`);
+
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json();
+
+          // Validate response structure
+          if (!data || typeof data !== 'object') {
+            console.log(`❌ Invalid reservations API response format`);
+            return null;
+          }
+
+          // Ensure reservations array exists
+          const reservationsData: ReservationsData = {
+            listing_id: listingId,
+            reservations: Array.isArray(data.reservations) ? data.reservations : []
+          };
+
+          logger.apiSuccess('GET', url, reservationsData.reservations.length);
+          console.log(`✅ Loaded ${reservationsData.reservations.length} reservations from API`);
+          return reservationsData;
+        } else {
+          console.log(`❌ Reservations API returned status ${response.status}`);
+        }
+      } catch (error) {
+        logger.apiFailure('GET', 'PriceLabs Reservations API', error);
+        console.log(`❌ PriceLabs API failed for reservations:`, error);
+      }
+
+      return null;
+    }
+
+    /**
+     * Try loading reservations from database cache
+     */
+    private tryLoadReservationsFromCache(listingId: string, allowStale: boolean = false): ReservationsData | null {
+      try {
+        const stmt = this.db.prepare('SELECT data_json, updated_at FROM reservations WHERE listing_id = ?');
+        const row = stmt.get(listingId) as { data_json: string; updated_at: string } | undefined;
+
+        if (row) {
+          const isFresh = isCacheFresh(row.updated_at, this.cacheMaxAgeHours);
+
+          if (isFresh || allowStale) {
+            const data = JSON.parse(row.data_json) as ReservationsData;
+            if (isFresh) {
+              console.log(`✅ Cache hit: reservations for listing ${listingId} (fresh)`);
+            } else {
+              console.log(`⚠️ Cache hit: reservations for listing ${listingId} (stale)`);
+            }
+            return data;
+          } else {
+            console.log(`❌ Cache miss: reservations for listing ${listingId} (expired)`);
+          }
+        } else {
+          console.log(`❌ Cache miss: no reservations cached for listing ${listingId}`);
+        }
+      } catch (error) {
+        console.log('❌ Database cache error:', error);
+      }
+
+      return null;
+    }
+
+    /**
+     * Try loading reservations from JSON file
+     */
+    private async tryLoadReservationsFromFile(listingId: string): Promise<ReservationsData | null> {
+      // Server-side file loading
+      if (typeof window === 'undefined') {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          const filePath = path.join(process.cwd(), 'public', `reservations-${listingId}.json`);
+
+          if (fs.existsSync(filePath)) {
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            const data = JSON.parse(fileContent) as ReservationsData;
+            console.log(`✅ Loaded reservations from fallback file`);
+            return data;
+          }
+        } catch (error) {
+          console.log('❌ Fallback file error:', error);
+        }
+      }
+
+      // Client-side fallback
+      try {
+        const response = await fetch(`/reservations-${listingId}.json`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Loaded reservations from client`);
+          return data as ReservationsData;
+        }
+      } catch (error) {
+        // Silent fail - reservations file is optional
+      }
+
+      return null;
+    }
+
+    /**
+     * Save reservations to database cache
+     */
+    private saveReservationsToCache(listingId: string, data: ReservationsData): void {
+      try {
+        const stmt = this.db.prepare(`
+          INSERT OR REPLACE INTO reservations (listing_id, data_json, updated_at)
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+        `);
+        stmt.run(listingId, JSON.stringify(data));
+        console.log(`✅ Cached reservations for listing ${listingId}`);
+      } catch (error) {
+        console.log('❌ Failed to cache reservations:', error);
+      }
+    }
 }

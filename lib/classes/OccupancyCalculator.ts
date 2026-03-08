@@ -1,4 +1,4 @@
-import { NeighborhoodData } from '../../types';
+import { NeighborhoodData, ReservationsData } from '../../types';
 
 /**
  * OccupancyCalculator handles all occupancy-related calculations
@@ -20,22 +20,52 @@ export class OccupancyCalculator {
    * - Option 2: Calculate from property's booking calendar
    * - Option 3: Use booking_pickup_unique fields to estimate future occupancy
    */
-  calculatePropertyOccupancy(
-    listing: any,
-    startDate: Date,
-    endDate: Date
-  ): number {
-    // Use adjusted_occupancy_past_30 as the best available proxy for future performance
-    const historicalOccupancy = this.extractPercentage(listing.adjusted_occupancy_past_30);
+  /**
+     * Calculate property occupancy for a given date range.
+     *
+     * ENHANCED: Now supports actual future occupancy calculation from reservations data.
+     * Falls back to historical data as proxy when reservations unavailable.
+     *
+     * @param listing - The property listing with occupancy data
+     * @param startDate - Start of the date range
+     * @param endDate - End of the date range
+     * @param reservationsData - Optional reservation data for the listing
+     * @returns Property occupancy as a decimal (0-1 range)
+     */
+    calculatePropertyOccupancy(
+      listing: any,
+      startDate: Date,
+      endDate: Date,
+      reservationsData?: ReservationsData | null
+    ): number {
+      // Validate date range
+      if (!this.validateDateRange(startDate, endDate)) {
+        return 0.0;
+      }
 
-    // Log warning to make the limitation visible
-    console.log(
-      `⚠️ Using historical occupancy (${(historicalOccupancy * 100).toFixed(1)}%) as proxy for future occupancy ` +
-      `for listing ${listing.id} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`
-    );
+      // If reservations data available: calculate from actual bookings
+      if (reservationsData && reservationsData.reservations.length > 0) {
+        const bookedDates = this.extractBookedDates(reservationsData, startDate, endDate);
+        const futureOccupancy = this.calculateFutureOccupancy(bookedDates, startDate, endDate);
 
-    return historicalOccupancy;
-  }
+        console.log(
+          `✅ Using actual future occupancy (${(futureOccupancy * 100).toFixed(1)}%) from ${reservationsData.reservations.length} reservations ` +
+          `for listing ${listing.id} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`
+        );
+
+        return futureOccupancy;
+      }
+
+      // Fallback: Use historical occupancy as proxy
+      const historicalOccupancy = this.extractPercentage(listing.adjusted_occupancy_past_30);
+
+      console.log(
+        `⚠️ Using historical occupancy (${(historicalOccupancy * 100).toFixed(1)}%) as proxy for future occupancy ` +
+        `for listing ${listing.id} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}) - reservations data unavailable`
+      );
+
+      return historicalOccupancy;
+    }
 
   /**
    * Calculate market occupancy from neighborhood data for a given date range
@@ -210,4 +240,145 @@ export class OccupancyCalculator {
     const match = value.match(/(\d+(?:\.\d+)?)/);
     return match ? parseFloat(match[1]) / 100 : 0;
   }
+
+    /**
+     * Parse an ISO 8601 date string to a UTC Date object
+     * @param dateString - Date string in ISO 8601 format (YYYY-MM-DD)
+     * @returns Date object normalized to UTC, or null if invalid
+     */
+    private parseDateToUTC(dateString: string): Date | null {
+      // Validate ISO 8601 format (YYYY-MM-DD)
+      const iso8601Regex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!iso8601Regex.test(dateString)) {
+        console.warn(`⚠️ Invalid date format: "${dateString}" (expected YYYY-MM-DD)`);
+        return null;
+      }
+
+      try {
+        // Parse to UTC by appending T00:00:00Z
+        const date = new Date(dateString + 'T00:00:00Z');
+
+        // Check if parsed date is valid
+        if (isNaN(date.getTime())) {
+          console.warn(`⚠️ Invalid date parsed from "${dateString}"`);
+          return null;
+        }
+
+        return date;
+      } catch (error) {
+        console.warn(`⚠️ Error parsing date "${dateString}":`, error);
+        return null;
+      }
+    }
+
+    /**
+     * Validate that a date range is valid (start <= end)
+     * @param startDate - Start date
+     * @param endDate - End date
+     * @returns true if valid, false otherwise
+     */
+    private validateDateRange(startDate: Date, endDate: Date): boolean {
+      if (startDate > endDate) {
+        console.error(`❌ Invalid date range: start (${startDate.toISOString().split('T')[0]}) is after end (${endDate.toISOString().split('T')[0]})`);
+        return false;
+      }
+      return true;
+    }
+    /**
+     * Extract booked dates from reservations data within a specified range
+     * @param reservationsData - The reservations data object
+     * @param startDate - Start of the date range to consider
+     * @param endDate - End of the date range to consider
+     * @returns Set of date strings in ISO 8601 format (YYYY-MM-DD) representing booked dates
+     */
+    private extractBookedDates(
+      reservationsData: ReservationsData,
+      startDate: Date,
+      endDate: Date
+    ): Set<string> {
+      const bookedDates = new Set<string>();
+
+      for (const reservation of reservationsData.reservations) {
+        // Validate required fields
+        if (!reservation.check_in || !reservation.check_out) {
+          console.warn(`⚠️ Skipping reservation missing required fields:`, reservation);
+          continue;
+        }
+
+        // Parse check-in and check-out dates
+        const checkIn = this.parseDateToUTC(reservation.check_in);
+        const checkOut = this.parseDateToUTC(reservation.check_out);
+
+        if (!checkIn || !checkOut) {
+          console.warn(`⚠️ Skipping reservation with invalid dates: check_in=${reservation.check_in}, check_out=${reservation.check_out}`);
+          continue;
+        }
+
+        // Validate check-in is before check-out
+        if (checkIn >= checkOut) {
+          console.warn(`⚠️ Skipping reservation where check-in >= check-out: ${reservation.check_in} to ${reservation.check_out}`);
+          continue;
+        }
+
+        // Include all dates in range [check-in, check-out)
+        // Note: check-out date is exclusive (guest departs that day)
+        const currentDate = new Date(checkIn);
+        while (currentDate < checkOut) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+
+          // Only include dates within our target range
+          if (currentDate >= startDate && currentDate <= endDate) {
+            bookedDates.add(dateStr);
+          }
+
+          // Move to next day
+          currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        }
+      }
+
+      return bookedDates;
+    }
+    /**
+     * Calculate occupancy percentage from booked dates
+     * @param bookedDates - Set of booked date strings
+     * @param startDate - Start of the date range (inclusive)
+     * @param endDate - End of the date range (inclusive)
+     * @returns Decimal value between 0.0 and 1.0
+     */
+    private calculateFutureOccupancy(
+      bookedDates: Set<string>,
+      startDate: Date,
+      endDate: Date
+    ): number {
+      // Calculate total nights in range (inclusive of both start and end)
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const totalNights = Math.round((endDate.getTime() - startDate.getTime()) / msPerDay) + 1;
+
+      if (totalNights <= 0) {
+        console.warn(`⚠️ Date range has zero or negative total nights: ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+        return 0.0;
+      }
+
+      // Count how many dates in range are booked
+      let bookedNights = 0;
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        if (bookedDates.has(dateStr)) {
+          bookedNights++;
+        }
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+
+      const occupancy = bookedNights / totalNights;
+
+      // Validate result is in expected range
+      if (occupancy < 0 || occupancy > 1) {
+        console.warn(`⚠️ Calculated occupancy out of range: ${(occupancy * 100).toFixed(1)}% (expected 0-100%)`);
+        return Math.max(0, Math.min(1, occupancy));
+      }
+
+      return occupancy;
+    }
 }

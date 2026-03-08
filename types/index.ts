@@ -151,3 +151,22 @@ export interface OccupancyData {
     end: Date;
   };
 }
+
+/**
+ * Represents a single booking reservation for a property
+ */
+export interface Reservation {
+  check_in: string;   // ISO 8601 date: "YYYY-MM-DD"
+  check_out: string;  // ISO 8601 date: "YYYY-MM-DD"
+  guest_name?: string;
+  confirmation_code?: string;
+  status?: string;
+}
+
+/**
+ * Represents the complete reservations response for a listing
+ */
+export interface ReservationsData {
+  listing_id: string;
+  reservations: Reservation[];
+}

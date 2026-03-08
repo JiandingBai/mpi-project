@@ -4,7 +4,8 @@ import {
   MPISummary,
   CalculatedMPI,
   Timeframe,
-  NeighborhoodData
+  NeighborhoodData,
+  ReservationsData
 } from '../../types';
 import { OccupancyCalculator } from './OccupancyCalculator';
 
@@ -74,86 +75,94 @@ export class MPICalculator {
   /**
    * Calculate MPI for a single listing for all timeframes
    */
-  async calculateAllMPIs(
-    listing: Listing,
-    neighborhoodData: NeighborhoodData
-  ): Promise<CalculatedMPI> {
-    const getMPI = (timeframe: Timeframe): number => {
-      const mpiField = `mpi_next_${timeframe}` as keyof Listing;
-      const existingMPI = listing[mpiField] as number;
+  /**
+     * Calculate MPI for a single listing for all timeframes
+     * @param listing - The listing to calculate MPI for
+     * @param neighborhoodData - Neighborhood market data
+     * @param reservationsData - Optional reservations data for future occupancy calculation
+     */
+    async calculateAllMPIs(
+      listing: Listing,
+      neighborhoodData: NeighborhoodData,
+      reservationsData?: ReservationsData | null
+    ): Promise<CalculatedMPI> {
+      const getMPI = (timeframe: Timeframe): number => {
+        const mpiField = `mpi_next_${timeframe}` as keyof Listing;
+        const existingMPI = listing[mpiField] as number;
 
-      // Priority 1: Use API MPI if available (including 0 as valid value)
-      if (existingMPI !== undefined && existingMPI !== null) {
-        const scaledMPI = existingMPI * MPI_SCALE_FACTOR;
-        console.log(`📊 Using API MPI for ${timeframe}-day (listing ${listing.id}): ${scaledMPI.toFixed(2)}`);
-        return scaledMPI;
-      }
-
-      // Priority 2: Calculate from neighborhood data
-      console.log(`🔄 API MPI not available for ${timeframe}-day (listing ${listing.id}), calculating from neighborhood data...`);
-
-      try {
-        const dateRange = this.getDateRangeForTimeframe(timeframe);
-
-        // Match listing to neighborhood category
-        const categoryId = this.occupancyCalculator.matchListingToCategory(listing, neighborhoodData);
-        if (categoryId) {
-          // Calculate property occupancy
-          const propertyOccupancy = this.occupancyCalculator.calculatePropertyOccupancy(
-            listing,
-            dateRange.start,
-            dateRange.end
-          );
-
-          // Calculate market occupancy
-          const marketOccupancy = this.occupancyCalculator.calculateMarketOccupancy(
-            neighborhoodData,
-            categoryId,
-            dateRange.start,
-            dateRange.end
-          );
-
-          // Validate market occupancy to prevent division by zero
-          if (marketOccupancy === 0) {
-            console.warn(`⚠️ Market occupancy is zero for ${timeframe}-day (listing ${listing.id}), cannot calculate MPI`);
-            return 0;
-          }
-
-          // Calculate MPI: (property_occupancy / market_occupancy) * 100
-          const calculatedMPI = (propertyOccupancy / marketOccupancy) * MPI_SCALE_FACTOR;
-          console.log(`✅ Calculated MPI ${timeframe}-day for listing ${listing.id}: ${calculatedMPI.toFixed(2)}`);
-          return calculatedMPI;
+        // Priority 1: Use API MPI if available (including 0 as valid value)
+        if (existingMPI !== undefined && existingMPI !== null) {
+          const scaledMPI = existingMPI * MPI_SCALE_FACTOR;
+          console.log(`📊 Using API MPI for ${timeframe}-day (listing ${listing.id}): ${scaledMPI.toFixed(2)}`);
+          return scaledMPI;
         }
-      } catch (error) {
-        console.log(`❌ Failed to calculate MPI ${timeframe}-day for listing ${listing.id}:`, error);
-      }
 
-      return 0;
-    };
+        // Priority 2: Calculate from neighborhood data
+        console.log(`🔄 API MPI not available for ${timeframe}-day (listing ${listing.id}), calculating from neighborhood data...`);
 
-    const mpi_7 = getMPI(7);
-    const mpi_30 = getMPI(30);
-    const mpi_60 = getMPI(60);
-    const mpi_90 = getMPI(90);
-    const mpi_120 = getMPI(120);
+        try {
+          const dateRange = this.getDateRangeForTimeframe(timeframe);
 
-    // Validate MPI values
-    this.validateMPI(mpi_7, 7, listing.id);
-    this.validateMPI(mpi_30, 30, listing.id);
-    this.validateMPI(mpi_60, 60, listing.id);
-    this.validateMPI(mpi_90, 90, listing.id);
-    this.validateMPI(mpi_120, 120, listing.id);
+          // Match listing to neighborhood category
+          const categoryId = this.occupancyCalculator.matchListingToCategory(listing, neighborhoodData);
+          if (categoryId) {
+            // Calculate property occupancy (with reservations data if available)
+            const propertyOccupancy = this.occupancyCalculator.calculatePropertyOccupancy(
+              listing,
+              dateRange.start,
+              dateRange.end,
+              reservationsData
+            );
 
-    return {
-      listingId: listing.id,
-      group: listing.group || 'Unknown',
-      mpi_7,
-      mpi_30,
-      mpi_60,
-      mpi_90,
-      mpi_120,
-    };
-  }
+            // Calculate market occupancy
+            const marketOccupancy = this.occupancyCalculator.calculateMarketOccupancy(
+              neighborhoodData,
+              categoryId,
+              dateRange.start,
+              dateRange.end
+            );
+
+            // Validate market occupancy to prevent division by zero
+            if (marketOccupancy === 0) {
+              console.warn(`⚠️ Market occupancy is zero for ${timeframe}-day (listing ${listing.id}), cannot calculate MPI`);
+              return 0;
+            }
+
+            // Calculate MPI: (property_occupancy / market_occupancy) * 100
+            const calculatedMPI = (propertyOccupancy / marketOccupancy) * MPI_SCALE_FACTOR;
+            console.log(`✅ Calculated MPI ${timeframe}-day for listing ${listing.id}: ${calculatedMPI.toFixed(2)}`);
+            return calculatedMPI;
+          }
+        } catch (error) {
+          console.log(`❌ Failed to calculate MPI ${timeframe}-day for listing ${listing.id}:`, error);
+        }
+
+        return 0;
+      };
+
+      const mpi_7 = getMPI(7);
+      const mpi_30 = getMPI(30);
+      const mpi_60 = getMPI(60);
+      const mpi_90 = getMPI(90);
+      const mpi_120 = getMPI(120);
+
+      // Validate MPI values
+      this.validateMPI(mpi_7, 7, listing.id);
+      this.validateMPI(mpi_30, 30, listing.id);
+      this.validateMPI(mpi_60, 60, listing.id);
+      this.validateMPI(mpi_90, 90, listing.id);
+      this.validateMPI(mpi_120, 120, listing.id);
+
+      return {
+        listingId: listing.id,
+        group: listing.group || 'Unknown',
+        mpi_7,
+        mpi_30,
+        mpi_60,
+        mpi_90,
+        mpi_120,
+      };
+    }
 
   /**
    * Calculate group averages from individual MPI calculations

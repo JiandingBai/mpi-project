@@ -57,7 +57,11 @@ export async function calculateMPISummaries(
   const calculatedMPIs: CalculatedMPI[] = [];
   for (const listing of listingsData.listings) {
     const neighborhoodData = sharedNeighborhoodData || await dataRepository.loadNeighborhood(listing.id);
-    const mpi = await mpiCalculator.calculateAllMPIs(listing, neighborhoodData);
+    
+    // Load reservations data for future occupancy calculation (with fallback to historical)
+    const reservationsData = await dataRepository.loadReservations(listing.id);
+    
+    const mpi = await mpiCalculator.calculateAllMPIs(listing, neighborhoodData, reservationsData);
     calculatedMPIs.push(mpi);
   }
   
