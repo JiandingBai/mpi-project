@@ -93,9 +93,12 @@ function getGroupKey(listing: Listing, grouping: string): string {
 
 /**
  * Calculate MPI for a single listing using neighborhood data
+ * @param listing - The listing to calculate MPI for
+ * @param sharedNeighborhoodData - Optional pre-loaded neighborhood data to avoid redundant API calls
  */
 async function calculateListingMPI(
-  listing: Listing
+  listing: Listing,
+  sharedNeighborhoodData?: NeighborhoodData | null
 ): Promise<CalculatedMPI> {
   const getMPI = async (timeframe: Timeframe): Promise<number> => {
     const mpiField = `mpi_next_${timeframe}` as keyof Listing;
@@ -115,8 +118,8 @@ async function calculateListingMPI(
     try {
       const dateRange = getDateRangeForTimeframe(timeframe);
       
-      // Load neighborhood data for this specific listing
-      const neighborhoodData = await loadNeighborhoodData(listing.id);
+      // Use shared neighborhood data if provided, otherwise load for this specific listing
+      const neighborhoodData = sharedNeighborhoodData ?? await loadNeighborhoodData(listing.id);
       
       // Match listing to neighborhood category
       const categoryId = matchListingToNeighborhood(listing, neighborhoodData);
@@ -442,9 +445,26 @@ export async function calculateMPISummaries(
   
   console.log(`Starting MPI calculations for ${listingsData.listings.length} listings...`);
   
+  // Optimization: Load neighborhood data once and share across all listings
+  // This reduces API calls from N (one per listing) to 1 (shared for all)
+  let sharedNeighborhoodData: NeighborhoodData | null = null;
+  
+  if (listingsData.listings.length > 0) {
+    try {
+      // Use first listing's ID to load shared neighborhood data
+      const firstListingId = listingsData.listings[0].id;
+      console.log(`🔄 Loading shared neighborhood data using listing ${firstListingId}...`);
+      sharedNeighborhoodData = await loadNeighborhoodData(firstListingId);
+      console.log(`✅ Shared neighborhood data loaded successfully, will be reused for all ${listingsData.listings.length} listings`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to load shared neighborhood data:`, error);
+      console.log(`📝 Will fall back to per-listing neighborhood data loading if needed`);
+    }
+  }
+  
   const calculatedMPIs = await Promise.all(
     listingsData.listings.map(async (listing) => {
-      const mpi = await calculateListingMPI(listing);
+      const mpi = await calculateListingMPI(listing, sharedNeighborhoodData);
       
       // Count calculation methods used PER LISTING (not per timeframe)
       // Check if this listing used API values, neighborhood calculation, or had no data
