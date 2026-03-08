@@ -323,15 +323,41 @@ function calculateMarketOccupancyFromCategory(
   return avgOccupancy;
 }
 
+/**
+ * Calculate property occupancy for a given date range.
+ *
+ * LIMITATION: Currently uses historical data as a proxy for future occupancy.
+ * Ideally, we would calculate future occupancy from the property's calendar/reservations
+ * for the specified date range. However, this data is not currently available in the API response.
+ *
+ * ASSUMPTION: Recent performance (past 30 days) is a reasonable predictor of near-term future performance.
+ * This is a common industry practice when actual future booking data is unavailable.
+ *
+ * TODO: Enhance this function to use actual future occupancy data when available:
+ * - Option 1: Use PriceLabs reservations API if available
+ * - Option 2: Calculate from property's booking calendar
+ * - Option 3: Use booking_pickup_unique fields to estimate future occupancy
+ *
+ * @param listing - The property listing with occupancy data
+ * @param startDate - Start of the date range (currently not used, see limitation above)
+ * @param endDate - End of the date range (currently not used, see limitation above)
+ * @returns Property occupancy as a decimal (0-1 range)
+ */
 export function calculatePropertyOccupancy(
   listing: any,
   startDate: Date,
   endDate: Date
 ): number {
-  // Note: For MPI calculations, we're comparing future market occupancy with property occupancy.
-  // Since we only have historical property data, we use the most recent occupancy (past 30 days)
-  // as the best predictor of future property performance across all timeframes.
-  return extractPercentage(listing.adjusted_occupancy_past_30);
+  // Use adjusted_occupancy_past_30 as the best available proxy for future performance
+  const historicalOccupancy = extractPercentage(listing.adjusted_occupancy_past_30);
+
+  // Log warning to make the limitation visible
+  console.log(
+    `⚠️ Using historical occupancy (${(historicalOccupancy * 100).toFixed(1)}%) as proxy for future occupancy ` +
+    `for listing ${listing.id} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`
+  );
+
+  return historicalOccupancy;
 }
 
 function extractPercentage(value: string): number {

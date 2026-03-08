@@ -66,16 +66,16 @@ describe('Bug #1: Property vs Market Occupancy Mismatch', () => {
     console.log = originalLog;
     
     // After fix, should log warning about using historical data
-    // This will FAIL on unfixed code (no warning logged)
+    // This will PASS on fixed code (warning is now logged)
     const hasWarning = consoleLogs.some(log => 
       log.includes('historical') || log.includes('proxy')
     );
     
-    // For now, expect no warning (demonstrating the bug)
-    expect(hasWarning).toBe(false);
+    // After fix, expect warning to be present
+    expect(hasWarning).toBe(true);
     
-    if (!hasWarning) {
-      console.log('⚠️ BUG CONFIRMED: No warning about using historical data as proxy');
+    if (hasWarning) {
+      console.log('✅ FIX VERIFIED: Warning about using historical data as proxy is now logged');
     }
   });
 });

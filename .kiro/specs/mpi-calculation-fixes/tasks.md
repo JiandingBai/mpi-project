@@ -146,7 +146,7 @@
 
 - [ ] 3.1 Fix property occupancy calculation to acknowledge timeframe
 
-  - [ ] 3.1.1 Update `calculatePropertyOccupancy()` in `lib/data-loader.ts`
+  - [x] 3.1.1 Update `calculatePropertyOccupancy()` in `lib/data-loader.ts`
     - Add JSDoc comment explaining current limitation (using historical data as proxy)
     - Add console.log warning when using historical data as proxy for future occupancy
     - Add TODO comment for future enhancement with actual future occupancy data
